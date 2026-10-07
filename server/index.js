@@ -232,7 +232,8 @@ async function main() {
     const who = ai.provider.account ? ` as ${ai.provider.account}` : "";
     console.log(`  ✓ Using ${ai.provider.name} (${ai.provider.model})${who}`);
   } else {
-    console.log("  ! No AI provider started. The app will run, but feedback requests will fail.");
+    console.log("  ! The AI tutor isn't running. The app still works, but gives example feedback");
+    console.log("    instead of AI feedback until Copilot is set up (see README).");
   }
 
   const server = http.createServer(createApp(config, { ai }));

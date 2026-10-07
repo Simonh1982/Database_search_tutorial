@@ -1,6 +1,6 @@
 // Runtime configuration, read from environment variables.
 // In a Codespace these can be set as Codespaces secrets or in the terminal
-// before running `npm start`, e.g. `AI_PROVIDER=github-models npm start`.
+// before running `npm start`, e.g. `AI_DAILY_LIMIT=100 npm start`.
 
 function list(value, fallback) {
   return (value ?? fallback)
@@ -24,18 +24,12 @@ export function loadConfig(env = process.env) {
 
     // Providers are tried in order; the first one that starts is used.
     // "copilot"       – GitHub Copilot SDK, billed to the signed-in Copilot user
-    // "github-models" – GitHub Models API using GITHUB_TOKEN (automatic in Codespaces)
     // "mock"          – canned responses, no AI (for development and tests)
-    providers: list(env.AI_PROVIDER, "copilot,github-models"),
+    providers: list(env.AI_PROVIDER, "copilot"),
 
     copilot: {
       token: env.COPILOT_GITHUB_TOKEN || "",
       model: env.COPILOT_MODEL || "",
-    },
-    githubModels: {
-      token: env.GITHUB_MODELS_TOKEN || env.GITHUB_TOKEN || "",
-      model: env.GITHUB_MODELS_MODEL || "openai/gpt-4.1-mini",
-      endpoint: env.GITHUB_MODELS_ENDPOINT || "https://models.github.ai/inference/chat/completions",
     },
     ncbiApiKey: env.NCBI_API_KEY || "",
 

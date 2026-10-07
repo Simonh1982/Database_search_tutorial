@@ -56,8 +56,12 @@ The server needs a token that allows it to make Copilot requests on your behalf.
    - Value: the token
    - Repository access: `Simonh1982/Database_search_tutorial`
 
-If no token is set, or Copilot can't be used, the server tries **GitHub Models** next. It uses the
-token every Codespace has automatically. Its free allowance is smaller, but it works for a quick demo.
+**Don't have Copilot through work yet?** You can test with **Copilot Free** on your personal GitHub
+account. Go to <https://github.com/settings/copilot> and turn it on, then create the token as above.
+Its monthly allowance is small, but it's enough to try the tutor. Without a working token, the app
+still runs, but it gives example feedback instead of AI feedback.
+
+(Earlier versions also fell back to GitHub Models. GitHub retired that service on 30 July 2026.)
 
 ### 3. (Optional) Add a passcode
 
@@ -106,9 +110,8 @@ allowance. Set them as Codespaces secrets, or before `npm start` (e.g. `AI_DAILY
 
 | Setting | Default | What it does |
 |---|---|---|
-| `AI_PROVIDER` | `copilot,github-models` | Providers to try, in order (`mock` = no AI, for testing) |
+| `AI_PROVIDER` | `copilot` | Which AI to use (`mock` = no AI, for testing) |
 | `COPILOT_MODEL` | cheapest "mini" model | Which Copilot model to use. `npm run models` lists them with their cost |
-| `GITHUB_MODELS_MODEL` | `openai/gpt-4.1-mini` | Model used when falling back to GitHub Models |
 | `AI_DAILY_LIMIT` | `300` | AI requests per day, all visitors combined |
 | `AI_PER_IP_LIMIT` / `AI_PER_IP_WINDOW` | `40` per `60` min | AI requests per visitor |
 | `DEMO_PASSCODE` | none | Passcode required for AI feedback |
@@ -140,7 +143,7 @@ web/                 The web app (static files, published to GitHub Pages)
   config.js          Optional default server address
   shared/            Code used by both browser and server (NCBI look-ups, search syntax, demo feedback)
 server/              The tutor server (Node.js), run in the Codespace
-  ai/                Copilot, GitHub Models and mock providers; prompt building; reply parsing
+  ai/                Copilot and mock providers; prompt building; reply parsing
 skills/              The tutor's teaching instructions, one folder per stage
 scripts/             `npm run share` and `npm run models`
 test/                Automated tests (`npm test`)

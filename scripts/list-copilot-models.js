@@ -17,6 +17,10 @@ try {
   if (!auth?.isAuthenticated) throw new Error("Copilot isn't signed in. Set the COPILOT_GITHUB_TOKEN secret first (see README).");
   console.log(`Signed in as ${auth.login || "unknown"}\n`);
   const models = await client.listModels();
+  if (models.length === 0) {
+    console.log("Copilot didn't return a list of models for this account (this is normal for Copilot Free).");
+    console.log('The tutor will use Copilot\'s automatic model choice ("auto") instead.');
+  }
   for (const m of models.sort((a, b) => (a.billing?.multiplier ?? 1) - (b.billing?.multiplier ?? 1))) {
     const cost = typeof m.billing?.multiplier === "number" ? `${m.billing.multiplier}x` : "?";
     const state = m.policy?.state === "disabled" ? "  (disabled)" : "";

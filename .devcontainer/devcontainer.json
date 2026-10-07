@@ -1,0 +1,30 @@
+{
+  "name": "Database Search Tutorial",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "postCreateCommand": "npm install",
+  "postAttachCommand": "npm start",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "Tutor app",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "codespaces": {
+      "openFiles": ["README.md"]
+    },
+    "vscode": {
+      "extensions": ["GitHub.copilot", "GitHub.copilot-chat"]
+    }
+  },
+  "secrets": {
+    "COPILOT_GITHUB_TOKEN": {
+      "description": "A fine-grained GitHub token with the 'Copilot Requests' permission, so the tutor can use your Copilot allowance.",
+      "documentationUrl": "https://github.com/Simonh1982/Database_search_tutorial#2-let-the-tutor-use-your-copilot-licence"
+    },
+    "DEMO_PASSCODE": {
+      "description": "Optional. A passcode colleagues must enter before the tutor gives AI feedback."
+    }
+  }
+}

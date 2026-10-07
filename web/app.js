@@ -189,7 +189,7 @@ function feedbackPanel(n) {
   const f = entry.feedback || {};
   const sourceText =
     entry.source === "live"
-      ? `Live AI tutor${entry.provider ? ` · ${entry.provider === "copilot" ? "GitHub Copilot" : entry.provider === "github-models" ? "GitHub Models" : entry.provider}` : ""}${entry.model ? ` (${entry.model})` : ""}`
+      ? `Live AI tutor${entry.provider ? ` · ${entry.provider === "copilot" ? "GitHub Copilot" : entry.provider}` : ""}${entry.model ? ` (${entry.model})` : ""}`
       : "Example feedback (offline demo, not AI)";
 
   panel.append(
@@ -868,9 +868,9 @@ function renderConnection() {
   pill.dataset.mode = connection.mode;
   label.textContent =
     connection.mode === "live"
-      ? `Live AI tutor · ${connection.provider === "copilot" ? "Copilot" : connection.provider === "github-models" ? "GitHub Models" : connection.provider}`
+      ? `Live AI tutor · ${connection.provider === "copilot" ? "Copilot" : connection.provider}`
       : connection.mode === "no-ai"
-        ? "Server connected · AI not ready"
+        ? "Example feedback · AI not set up yet"
         : "Offline demo · example feedback";
 }
 

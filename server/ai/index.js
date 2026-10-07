@@ -1,7 +1,6 @@
 // Chooses an AI provider and turns student work into tutor feedback.
 
 import { createCopilotProvider } from "./copilot.js";
-import { createGitHubModelsProvider } from "./githubModels.js";
 import { createMockProvider } from "./mock.js";
 import { buildPrompt } from "./prompt.js";
 import { parseFeedback } from "./parse.js";
@@ -10,8 +9,6 @@ function create(name, config) {
   switch (name) {
     case "copilot":
       return createCopilotProvider(config.copilot);
-    case "github-models":
-      return createGitHubModelsProvider(config.githubModels);
     case "mock":
       return createMockProvider();
     default:

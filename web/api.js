@@ -114,6 +114,13 @@ export async function connectTo(base, passcode = "") {
 
 // Returns { feedback, source: "live" | "demo", notice? }
 export async function requestFeedback(stage, data, attempt) {
+  if (connection.mode === "no-ai") {
+    return {
+      feedback: demoFeedback(stage, data),
+      source: "demo",
+      notice: "The tutor server is running, but its AI isn't set up yet (see the README), so this is example feedback.",
+    };
+  }
   if (connection.mode !== "live") {
     return { feedback: demoFeedback(stage, data), source: "demo" };
   }

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildPrompt, sanitiseWork, stripFrontMatter } from "../server/ai/prompt.js";
 import { extractJson, parseFeedback } from "../server/ai/parse.js";
-import { chooseModel } from "../server/ai/copilot.js";
+import { chooseModel, shortError } from "../server/ai/copilot.js";
 import { demoFeedback } from "../web/shared/demo.js";
 
 test("stripFrontMatter removes the YAML header", () => {
@@ -57,6 +57,18 @@ test("parseFeedback normalises fields and hides model answers when not allowed",
 
 test("parseFeedback falls back to showing plain text", () => {
   assert.equal(parseFeedback("Just some advice.").summary, "Just some advice.");
+});
+
+test("chooseModel lets Copilot choose when the model list is empty", () => {
+  assert.equal(chooseModel([]), "");
+  assert.equal(chooseModel([], "gpt-5-mini"), "gpt-5-mini");
+  assert.throws(() => chooseModel([{ id: "a", policy: { state: "disabled" } }]), /switched off/);
+});
+
+test("shortError keeps just the readable part of Copilot errors", () => {
+  const raw = 'Request models.list failed with message: GenericFailure, {"kind":"http","status":403,"body":"unauthorized: not authorized to use this Copilot feature\\n","headers":[{"name":"date"}]}';
+  assert.equal(shortError(new Error(raw)), "unauthorized: not authorized to use this Copilot feature");
+  assert.equal(shortError(new Error("Plain message")), "Plain message");
 });
 
 test("chooseModel prefers an enabled mini model, and honours a configured one", () => {

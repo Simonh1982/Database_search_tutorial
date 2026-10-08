@@ -130,3 +130,26 @@ test("history from the browser is tolerated when missing or malformed", async ()
     assert.equal(repeated, false);
   }
 });
+
+test("student notes reach the tutor as separate context", async () => {
+  const notes = "I want papers on either triptans or NSAIDs, not only comparisons.";
+  const work = sanitiseWork(2, { question, concepts: ["migraine", "triptans", "NSAIDs"], notes });
+  assert.equal(work.studentNotes, notes);
+  assert.deepEqual(work.concepts, ["migraine", "triptans", "NSAIDs"]); // notes don't leak into concepts
+  assert.equal(sanitiseWork(2, { question, concepts: ["a"], notes: "   " }).studentNotes, undefined);
+
+  const { user } = await buildPrompt(5, { question, blocks: [] }, 1, { earlier: [{ stage: 2, feedback: { items: [] }, notes }] });
+  assert.match(user, /<earlier_stages>[\s\S]*either triptans or NSAIDs/);
+});
+
+test("changing only the notes is treated as new work, not a repeat", async () => {
+  const provider = contradictoryProvider();
+  const { repeated } = await getFeedback(provider, {
+    stage: 2,
+    data: { ...firstAttempt.work, notes: "Both treatments are of interest." },
+    attempt: 2,
+    history: [firstAttempt],
+  });
+  assert.equal(repeated, false);
+  assert.equal(provider.calls.length, 1);
+});

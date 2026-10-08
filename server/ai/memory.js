@@ -46,7 +46,13 @@ export function earlierStages(stage, earlier) {
     .slice(0, 4)
     .map((e) => {
       const f = compactFeedback(e.feedback);
-      return { stage: Number(e.stage), summary: f.summary, items: f.items.map(({ label, status }) => ({ label, status })) };
+      const notes = clip(e.notes, 400);
+      return {
+        stage: Number(e.stage),
+        summary: f.summary,
+        items: f.items.map(({ label, status }) => ({ label, status })),
+        ...(notes ? { studentNotes: notes } : {}),
+      };
     });
 }
 

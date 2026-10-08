@@ -51,7 +51,14 @@ function clipList(values, maxItems, maxLength) {
 }
 
 // Keep only the fields each stage needs, with length limits, so prompts stay small and predictable.
+// The student's optional notes are context for the tutor only; they never become search terms.
 export function sanitiseWork(stage, data = {}) {
+  const work = stageWork(stage, data);
+  const notes = clip(data.notes, 800);
+  return notes ? { ...work, studentNotes: notes } : work;
+}
+
+function stageWork(stage, data) {
   const question = clip(data.question, 1000);
   const concepts = Array.isArray(data.concepts) ? data.concepts.slice(0, 5) : [];
 

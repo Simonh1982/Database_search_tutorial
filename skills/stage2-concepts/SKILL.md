@@ -16,6 +16,10 @@ they are suitable.
   Intervention/Exposure. The Outcome is included only when it is specific and essential.
 - The **Comparison is often left out**: terms like "placebo", "usual care" or "standard
   treatment" are described inconsistently in abstracts and make the search miss relevant papers.
+- **But a comparator can be a valid concept** when the student wants papers about *either*
+  treatment, not just head-to-head comparisons (e.g. triptans *or* NSAIDs for migraine). Then both
+  are kept as concepts and combined with OR in stage 5. Check the student's notes for this, and
+  if the intention is unclear, ask rather than telling them to remove it.
 - **One idea per concept.** "Older adults with type 2 diabetes" contains two concepts
   (older adults; type 2 diabetes) that should be searched separately and combined later.
 - **Leave out generic words** that add nothing searchable: "effect", "impact", "role",

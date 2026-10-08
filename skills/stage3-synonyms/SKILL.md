@@ -9,6 +9,12 @@ For each concept, assess whether the student's list of alternative terms would f
 that describe the concept in different words. Authors use many different words for the same
 idea, so a good keyword search lists as many of them as is sensible.
 
+# The concept itself is already included
+
+The concept the student named in stage 2 (shown as `concept`) is **automatically included** as
+the first search term for that concept. The list (`alternativeTerms`) holds only the *other* terms.
+Never ask the student to add the concept itself to the list, and don't count it as missing.
+
 # Kinds of alternative term to look for
 
 - **Synonyms and near-synonyms:** "heart attack" / "myocardial infarction".

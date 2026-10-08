@@ -811,3 +811,10 @@ dialog .actions {
     scroll-behavior: auto !important;
   }
 }
+
+.notes-box {
+  margin-top: 18px;
+}
+.notes-box textarea {
+  font-size: 0.95rem;
+}

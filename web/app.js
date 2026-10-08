@@ -1,7 +1,7 @@
 // Database Search Tutorial – five-stage interactive tutorial.
 // Plain JavaScript modules, no build step, so it runs on GitHub Pages and in a Codespace unchanged.
 
-import { autoConnect, connectTo, connection, lookupMesh, pubmedCount, requestFeedback } from "./api.js";
+import { autoConnect, canWake, connectTo, connection, lookupMesh, pubmedCount, requestFeedback, setPasscode, wakeTutor } from "./api.js";
 import { buildBlock, checkSyntax, combineBlocks, OPERATORS, parseTerms } from "./shared/strategy.js";
 import { pubmedUrl } from "./shared/ncbi.js";
 
@@ -263,6 +263,7 @@ async function submitFeedback(n, data, button) {
     const result = await requestFeedback(n, data, attempt, tutorContext(n));
     state.attempts[n] = attempt;
     state.feedback[n] = { ...result, attempt };
+    renderConnection();
     if (result.source === "live") {
       state.history[n] = [...(state.history[n] || []), { attempt, work: data, feedback: result.feedback }].slice(-HISTORY_SENT);
     }
@@ -941,6 +942,91 @@ function renderConnection() {
         : "Offline demo · example feedback";
 }
 
+// ---------- Waking the tutor ----------
+
+let wake = { status: "idle" }; // "idle" | "waking" | "error"
+
+const WAKE_STATES = {
+  Shutdown: "asleep",
+  ShuttingDown: "just going to sleep",
+  Starting: "starting up",
+  Queued: "starting up",
+  Provisioning: "starting up",
+  Available: "nearly ready",
+};
+
+function renderWakeBanner() {
+  const slot = $("wake-banner");
+  if (wake.status !== "waking" && !canWake()) {
+    slot.replaceChildren();
+    return;
+  }
+  if (wake.status === "waking") {
+    slot.replaceChildren(
+      h(
+        "div",
+        { class: "wake-banner waking", role: "status" },
+        h("p", { class: "wake-title" }, "Waking the tutor… ", h("span", { class: "muted", text: `${wake.seconds || 0} s` })),
+        h("p", {
+          text: `The tutor's computer is ${WAKE_STATES[wake.state] || "starting up"}. This usually takes 1–2 minutes. You can carry on working; feedback switches to the AI tutor when it's ready.`,
+        }),
+      ),
+    );
+    return;
+  }
+  const passcode = h("input", { type: "password", id: "wake-passcode", autocomplete: "off", value: connection.passcode });
+  slot.replaceChildren(
+    h(
+      "div",
+      { class: "wake-banner", role: "region", "aria-label": "AI tutor status" },
+      h(
+        "div",
+        { class: "wake-text" },
+        h("p", { class: "wake-title", text: "The AI tutor is asleep" }),
+        h("p", { text: "Wake it up to get AI feedback. It takes about 1–2 minutes, and until then you'll see example feedback." }),
+        wake.error ? h("p", { class: "field-error", role: "alert", text: wake.error }) : null,
+        wake.needPasscode ? h("div", { class: "wake-passcode" }, h("label", { for: "wake-passcode", text: "Passcode" }), passcode) : null,
+      ),
+      h(
+        "button",
+        {
+          type: "button",
+          class: "button",
+          onclick: () => {
+            if (wake.needPasscode) setPasscode(passcode.value.trim());
+            startWake();
+          },
+        },
+        "Wake the tutor",
+      ),
+    ),
+  );
+}
+
+async function startWake() {
+  const startedAt = Date.now();
+  wake = { status: "waking", seconds: 0, state: "Starting" };
+  renderWakeBanner();
+  // Tick every second so people can see something is happening.
+  const ticker = setInterval(() => {
+    wake.seconds = Math.round((Date.now() - startedAt) / 1000);
+    renderWakeBanner();
+  }, 1000);
+  try {
+    await wakeTutor((_seconds, state) => {
+      wake.state = state;
+      renderWakeBanner();
+    });
+    wake = { status: "idle" };
+  } catch (err) {
+    wake = { status: "error", error: err.message, needPasscode: err.status === 401 };
+  } finally {
+    clearInterval(ticker);
+  }
+  renderConnection();
+  renderWakeBanner();
+}
+
 function openConnection() {
   const dialog = $("connection-dialog");
   $("backend-input").value = connection.base;
@@ -966,6 +1052,7 @@ function setupConnectionDialog() {
     save.disabled = false;
     save.textContent = "Connect";
     renderConnection();
+    renderWakeBanner();
     if (connection.mode === "live") $("connection-dialog").close();
     else openConnection();
   });
@@ -977,10 +1064,14 @@ const RENDERERS = { 1: stage1, 2: stage2, 3: stage3, 4: stage4, 5: stage5 };
 
 function render() {
   renderStepper();
+  renderWakeBanner();
   $("stage").replaceChildren(RENDERERS[state.stage]());
   document.title = `${STAGES[state.stage - 1].title} – Database Search Tutorial`;
 }
 
 setupConnectionDialog();
 render();
-autoConnect().then(renderConnection);
+autoConnect().then(() => {
+  renderConnection();
+  renderWakeBanner();
+});

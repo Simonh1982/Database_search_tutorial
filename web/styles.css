@@ -818,3 +818,43 @@ dialog .actions {
 .notes-box textarea {
   font-size: 0.95rem;
 }
+
+/* Wake-up banner */
+.wake-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  background: var(--developing-soft);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--developing);
+}
+.wake-banner.waking {
+  display: block;
+  background: var(--primary-soft);
+  border-left-color: var(--primary);
+}
+.wake-banner p {
+  margin: 0;
+}
+.wake-text {
+  flex: 1;
+  min-width: 220px;
+}
+.wake-title {
+  font-weight: 700;
+  margin-bottom: 2px !important;
+}
+.wake-passcode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wake-passcode input {
+  max-width: 220px;
+}

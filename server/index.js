@@ -252,6 +252,7 @@ async function main() {
     console.log(`\nApp running at http://localhost:${config.port}`);
     if (publicUrl) {
       console.log(`Codespace address: ${publicUrl}`);
+      console.log(`Codespace name:    ${config.codespaceName}   (needed for the wake-up button, see README)`);
       console.log("\nTo share with colleagues, make port " + config.port + " Public (run `npm run share`), then send them:");
       console.log(`  ${config.pagesUrl}?backend=${encodeURIComponent(publicUrl)}`);
     }

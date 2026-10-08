@@ -1,6 +1,6 @@
 // Talks to the tutor server in the Codespace, or falls back to the offline demo.
 
-import { DEFAULT_BACKEND } from "./config.js";
+import { DEFAULT_BACKEND, WAKE_URL } from "./config.js";
 import { demoFeedback } from "./shared/demo.js";
 import { searchMesh, countPubMed } from "./shared/ncbi.js";
 
@@ -14,6 +14,7 @@ export const connection = {
   passcode: "",
   passcodeRequired: false,
   message: "",
+  asleep: "", // address of a tutor server that didn't answer and can be woken, or ""
 };
 
 function load() {
@@ -68,8 +69,10 @@ function applyHealth(base, health) {
   connection.message = health.ai?.ready ? "" : (health.ai?.errors || []).map((e) => `${e.provider}: ${e.message}`).join(" ");
 }
 
-function useDemo(message = "") {
+function useDemo(message = "", sleepingBase = "") {
   Object.assign(connection, { base: "", mode: "demo", provider: "", model: "", passcodeRequired: false, message });
+  // A tutor server that didn't answer is probably asleep; offer to wake it if a doorbell is set up.
+  connection.asleep = WAKE_URL && sleepingBase && !sleepingBase.startsWith(location.origin) ? sleepingBase : "";
 }
 
 // Work out which server to use: ?backend= link, then saved setting, then config.js, then this site itself.
@@ -91,7 +94,8 @@ export async function autoConnect() {
       // Try the next candidate.
     }
   }
-  useDemo(candidates.some(Boolean) ? "The tutor server couldn't be reached, so the offline demo is being used." : "");
+  const wanted = candidates.find(Boolean) || "";
+  useDemo(wanted ? "The tutor server couldn't be reached, so the offline demo is being used." : "", wanted);
   return connection;
 }
 
@@ -107,9 +111,53 @@ export async function connectTo(base, passcode = "") {
   try {
     applyHealth(url, await tryServer(url));
   } catch (err) {
-    useDemo(`Couldn't reach ${url}: ${err.message} Is the Codespace running and port 3000 set to Public?`);
+    useDemo(`Couldn't reach ${url}: ${err.message} Is the Codespace running and port 3000 set to Public?`, url);
   }
   return connection;
+}
+
+// ---------- Waking the tutor ----------
+
+export const canWake = () => Boolean(WAKE_URL && connection.asleep);
+
+export function setPasscode(passcode) {
+  connection.passcode = passcode;
+  save({ ...load(), passcode });
+}
+
+// Rings the doorbell, then waits for the tutor to answer. `onProgress(seconds, state)` is called
+// while waiting. Resolves with the connection once the tutor is ready; throws if it doesn't wake.
+export async function wakeTutor(onProgress = () => {}) {
+  const doorbell = clean(WAKE_URL);
+  const target = connection.asleep;
+  const rung = await fetchJson(
+    `${doorbell}/wake`,
+    { method: "POST", headers: connection.passcode ? { "X-Wake-Passcode": connection.passcode } : {} },
+    20_000,
+  );
+
+  const started = Date.now();
+  let state = rung.state || "Starting";
+  for (let check = 0; Date.now() - started < 5 * 60_000; check += 1) {
+    onProgress(Math.round((Date.now() - started) / 1000), state);
+    try {
+      applyHealth(target, await tryServer(target));
+      connection.asleep = "";
+      connection.message = "";
+      return connection;
+    } catch {
+      // Not ready yet.
+    }
+    if (check % 3 === 2) {
+      try {
+        state = (await fetchJson(`${doorbell}/status`, {}, 10_000)).state || state;
+      } catch {
+        // Keep the last known state.
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  throw new Error(`The tutor didn't wake up within 5 minutes (its Codespace says "${state}"). Please try again, or ask the person running it to check.`);
 }
 
 // Returns { feedback, source: "live" | "demo", notice? }
@@ -146,6 +194,8 @@ export async function requestFeedback(stage, data, attempt, context = {}) {
     };
   } catch (err) {
     if (err.status === 401 || err.status === 429) throw err;
+    // No answer at all: the tutor has probably gone to sleep, so offer to wake it.
+    if (!err.status) useDemo("The tutor stopped responding.", connection.base);
     return {
       feedback: demoFeedback(stage, data),
       source: "demo",

@@ -50,16 +50,25 @@ export function buildBlock({ concept = "", synonyms = [], meshHeadings = [] } = 
 export const OPERATORS = ["AND", "OR", "NOT"];
 
 // Join blocks with the operators the student chose. Returns "" until every gap has an operator.
+// Blocks joined by OR are alternatives for the same idea (e.g. triptans OR NSAIDs), so they are
+// bracketed together first: #1 AND #2 OR #3 becomes #1 AND (#2 OR #3). PubMed would otherwise
+// read it left to right as (#1 AND #2) OR #3.
 export function combineBlocks(blocks, operators) {
   const filled = blocks.map((b) => String(b || "").trim()).filter(Boolean);
   if (filled.length === 0) return "";
-  let out = filled[0];
+  const groups = [[filled[0]]];
+  const joins = [];
   for (let i = 1; i < filled.length; i += 1) {
     const op = operators[i - 1];
     if (!OPERATORS.includes(op)) return "";
-    out += ` ${op} ${filled[i]}`;
+    if (op === "OR") groups.at(-1).push(filled[i]);
+    else {
+      joins.push(op);
+      groups.push([filled[i]]);
+    }
   }
-  return out;
+  const text = groups.map((g) => (g.length === 1 ? g[0] : `(${g.join(" OR ")})`));
+  return text.reduce((out, g, i) => `${out} ${joins[i - 1]} ${g}`);
 }
 
 // Check that brackets and quotes balance, so students get a clear message before searching.

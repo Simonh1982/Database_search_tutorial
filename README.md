@@ -31,6 +31,9 @@ Students work through five stages, getting tutor feedback at each one:
 - What the tutor checks at each stage is written in plain English in `skills/`, one file per stage,
   so librarians can change the teaching without touching any code.
 - MeSH headings and PubMed result counts are real, from the US National Library of Medicine.
+- At every stage, students can add optional **notes for the tutor** to explain their choices,
+  e.g. "I want papers on either triptans or NSAIDs". Only the tutor sees them, at that stage and
+  later ones. They are never added to search terms, MeSH look-ups or PubMed searches.
 - If the Codespace isn't running, the page switches to an **offline demo**. It gives rule-based
   example feedback instead of AI feedback, so the page always works.
 

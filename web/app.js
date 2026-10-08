@@ -34,6 +34,7 @@ function freshState() {
     feedback: {}, // stage -> { feedback, source, notice, attempt, provider, model }
     attempts: {}, // stage -> number
     history: {}, // stage -> [{ attempt, work, feedback }] – live AI feedback only, sent back as context
+    notes: {}, // stage -> the student's optional notes for the tutor (never added to the search)
   };
 }
 
@@ -246,7 +247,7 @@ function tutorContext(n) {
   const earlier = [];
   for (let s = 1; s < n; s += 1) {
     const last = (state.history[s] || []).at(-1);
-    if (last) earlier.push({ stage: s, feedback: last.feedback });
+    if (last) earlier.push({ stage: s, feedback: last.feedback, notes: last.work?.notes || "" });
   }
   return { history, earlier };
 }
@@ -258,6 +259,7 @@ async function submitFeedback(n, data, button) {
   button.textContent = connection.mode === "live" ? "The tutor is reading your work…" : "Checking…";
   button.setAttribute("aria-busy", "true");
   try {
+    data = { ...data, notes: (state.notes[n] || "").trim() };
     const result = await requestFeedback(n, data, attempt, tutorContext(n));
     state.attempts[n] = attempt;
     state.feedback[n] = { ...result, attempt };
@@ -274,6 +276,40 @@ async function submitFeedback(n, data, button) {
   saveState();
   render();
   document.querySelector(".feedback-region")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// Optional notes for the tutor. Only the tutor sees them; they never become part of the search.
+const NOTES_EXAMPLES = {
+  1: "e.g. This is for a quick answer for a clinical team, not a systematic review.",
+  2: "e.g. I want papers on either triptans or NSAIDs, not only comparisons between them.",
+  3: "e.g. Sumatriptan is the triptan most often prescribed in the UK.",
+  4: "e.g. I couldn't find a heading for HbA1c, so I'm relying on keywords.",
+  5: "e.g. I've used OR between #2 and #3 because either treatment is relevant.",
+};
+
+function notesBox(n) {
+  const id = `notes-${n}`;
+  return h(
+    "div",
+    { class: "notes-box" },
+    h("label", { for: id, class: "field-label" }, "Notes for the tutor ", h("span", { class: "muted", text: "(optional)" })),
+    h("textarea", {
+      id,
+      rows: 2,
+      value: state.notes[n] || "",
+      placeholder: NOTES_EXAMPLES[n],
+      "aria-describedby": `${id}-hint`,
+      oninput: (e) => {
+        state.notes[n] = e.target.value;
+        saveState();
+      },
+    }),
+    h("p", {
+      id: `${id}-hint`,
+      class: "hint",
+      text: "Explain your choices, or anything the tutor should take into account. Notes are only shared with the tutor and are never added to your search.",
+    }),
+  );
 }
 
 function inlineError(text) {
@@ -333,6 +369,7 @@ function stage1() {
     textarea,
     h("p", { id: "question-hint", class: "hint", text: "Press Enter to analyse (Shift+Enter for a new line). Edit your question in the same box and analyse again as often as you like." }),
     errorSlot,
+    notesBox(1),
     h("div", { class: "actions" }, button),
     feedbackPanel(1),
     navButtons(1, () => (state.question.trim() ? "" : "Write your research question before moving on.")),
@@ -413,6 +450,7 @@ function stage2() {
     questionBox(),
     h("div", { class: "concepts" }, fields),
     errorSlot,
+    notesBox(2),
     h(
       "div",
       { class: "actions" },
@@ -484,14 +522,17 @@ function stage3() {
                 rows: 5,
                 value: state.synonyms[c] || "",
                 placeholder: "One term per line",
+                "aria-describedby": `syn-hint-${i}`,
                 oninput: (e) => {
                   state.synonyms[c] = e.target.value;
                   saveState();
                 },
               }),
+              h("p", { id: `syn-hint-${i}`, class: "hint" }, "“", c, "” is already included in your search, so just list the other words authors might use."),
             ),
           ),
         ),
+    list.length ? notesBox(3) : null,
     h("div", { class: "actions" }, list.length ? button : null),
     feedbackPanel(3),
     navButtons(3),
@@ -642,6 +683,7 @@ function stage4() {
       ),
     ]),
     list.length === 0 ? h("p", { class: "alert warning", text: "Add your search concepts in stage 2 first." }) : h("div", { class: "concept-cards" }, list.map(meshCard)),
+    list.length ? notesBox(4) : null,
     h("div", { class: "actions" }, list.length ? button : null),
     feedbackPanel(4),
     navButtons(4),
@@ -823,6 +865,7 @@ function stage5() {
     questionBox(),
     list.length === 0 ? h("p", { class: "alert warning", text: "Add your search concepts in stage 2 first." }) : h("div", { class: "blocks" }, blockEls),
     list.length ? finalSection(list) : null,
+    list.length ? notesBox(5) : null,
     h(
       "div",
       { class: "actions" },
@@ -874,6 +917,8 @@ function downloadStrategy(list) {
   });
   const strategy = finalStrategy(list);
   lines.push("Final PubMed strategy:", strategy || "(not combined yet)");
+  const notes = STAGES.filter((s) => (state.notes[s.n] || "").trim()).map((s) => `  ${s.short}: ${state.notes[s.n].trim()}`);
+  if (notes.length) lines.push("", "Notes for the tutor:", ...notes);
   if (state.finalCount?.query === strategy) lines.push(`Results: ${state.finalCount.count}`);
   const blob = new Blob([lines.join("\n")], { type: "text/plain" });
   const a = h("a", { href: URL.createObjectURL(blob), download: "search-strategy.txt" });

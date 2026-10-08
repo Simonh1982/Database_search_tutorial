@@ -115,7 +115,7 @@ function stage5(data) {
     label: "Combining the blocks",
     status: usesOr ? "developing" : "strong",
     comment: usesOr
-      ? "You've used OR between different concepts. That finds papers about any one of them, rather than all of them together."
+      ? "You've used OR between two concepts, which finds papers about either one. That's right if they're alternatives (e.g. two treatments), but between different parts of your question, use AND."
       : usesNot
         ? "Be careful with NOT: it can remove relevant papers that mention the excluded idea in passing."
         : "AND between concepts narrows the search to papers about all of them.",

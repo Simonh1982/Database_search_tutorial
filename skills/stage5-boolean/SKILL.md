@@ -15,6 +15,11 @@ them, and the live PubMed result counts included in their work.
 - **AND between concepts:** this narrows the search to papers about all the concepts together.
   Using OR between different concepts is the most common mistake. It usually produces a
   very large result count.
+- **OR between two blocks is correct when they are alternatives for the same part of the
+  question.** For example, triptans OR NSAIDs, when papers about either treatment are relevant.
+  Check the student's notes and earlier choices before calling an OR a mistake. The app puts
+  blocks joined by OR in brackets automatically, so `#1 AND #2 OR #3` is searched as
+  `#1 AND (#2 OR #3)`.
 - **NOT with great care:** it can exclude relevant papers. For example, `NOT animals[mh]` also
   removes studies of both humans and animals. The safer pattern is
   `NOT (animals[mh] NOT humans[mh])`.

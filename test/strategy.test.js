@@ -22,9 +22,15 @@ test("buildBlock ORs MeSH and keywords without duplicates", () => {
 });
 
 test("combineBlocks needs an operator in every gap", () => {
-  assert.equal(combineBlocks(["(a)", "(b)", "(c)"], ["AND", "OR"]), "(a) AND (b) OR (c)");
+  assert.equal(combineBlocks(["(a)", "(b)", "(c)"], ["AND", "AND"]), "(a) AND (b) AND (c)");
   assert.equal(combineBlocks(["(a)", "(b)"], [""]), "");
   assert.equal(combineBlocks(["(a)"], []), "(a)");
+});
+
+test("combineBlocks brackets alternatives joined by OR before combining with AND", () => {
+  assert.equal(combineBlocks(["migraine", "triptans", "NSAIDs"], ["AND", "OR"]), "migraine AND (triptans OR NSAIDs)");
+  assert.equal(combineBlocks(["a", "b", "c", "d"], ["OR", "AND", "NOT"]), "(a OR b) AND c NOT d");
+  assert.equal(combineBlocks(["a", "b"], ["OR"]), "(a OR b)");
 });
 
 test("checkSyntax spots unbalanced brackets, quotes and lower-case operators", () => {

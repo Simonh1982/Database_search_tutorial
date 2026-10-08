@@ -113,7 +113,10 @@ export async function connectTo(base, passcode = "") {
 }
 
 // Returns { feedback, source: "live" | "demo", notice? }
-export async function requestFeedback(stage, data, attempt) {
+// `context` carries the student's earlier attempts so the tutor stays consistent:
+//   history – previous attempts at this stage [{ attempt, work, feedback }]
+//   earlier – latest feedback from earlier stages [{ stage, feedback }]
+export async function requestFeedback(stage, data, attempt, context = {}) {
   if (connection.mode === "no-ai") {
     return {
       feedback: demoFeedback(stage, data),
@@ -130,11 +133,17 @@ export async function requestFeedback(stage, data, attempt) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(connection.passcode ? { "X-Demo-Passcode": connection.passcode } : {}) },
-        body: JSON.stringify({ stage, attempt, data }),
+        body: JSON.stringify({ stage, attempt, data, history: context.history || [], earlier: context.earlier || [] }),
       },
       120_000,
     );
-    return { feedback: body.feedback, source: "live", provider: body.provider, model: body.model };
+    return {
+      feedback: body.feedback,
+      source: "live",
+      provider: body.provider,
+      model: body.model,
+      notice: body.repeated ? "You haven't changed anything since your last submission, so this is the same feedback as before." : "",
+    };
   } catch (err) {
     if (err.status === 401 || err.status === 429) throw err;
     return {

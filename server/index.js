@@ -17,7 +17,7 @@ import { startAI, getFeedback } from "./ai/index.js";
 import { searchMesh, countPubMed } from "../web/shared/ncbi.js";
 
 const WEB_DIR = fileURLToPath(new URL("../web/", import.meta.url));
-const MAX_BODY_BYTES = 32 * 1024;
+const MAX_BODY_BYTES = 128 * 1024; // room for earlier attempts sent as context
 
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -136,9 +136,15 @@ export function createApp(config, { ai = { provider: null, errors: [] }, fetchIm
 
       const started = Date.now();
       try {
-        const feedback = await getFeedback(ai.provider, { stage, data: body.data || {}, attempt: body.attempt });
-        log(`${new Date().toISOString()} feedback stage=${stage} attempt=${body.attempt ?? 1} ${Date.now() - started}ms`);
-        return { feedback, provider: ai.provider.name, model: ai.provider.model };
+        const { feedback, repeated } = await getFeedback(ai.provider, {
+          stage,
+          data: body.data || {},
+          attempt: body.attempt,
+          history: body.history,
+          earlier: body.earlier,
+        });
+        log(`${new Date().toISOString()} feedback stage=${stage} attempt=${body.attempt ?? 1}${repeated ? " (unchanged, not sent to AI)" : ""} ${Date.now() - started}ms`);
+        return { feedback, repeated, provider: ai.provider.name, model: ai.provider.model };
       } catch (err) {
         log(`${new Date().toISOString()} feedback stage=${stage} failed: ${err.message}`);
         throw new HttpError(502, `The AI tutor couldn't respond: ${err.message}`);
@@ -231,6 +237,10 @@ async function main() {
   if (ai.provider) {
     const who = ai.provider.account ? ` as ${ai.provider.account}` : "";
     console.log(`  ✓ Using ${ai.provider.name} (${ai.provider.model})${who}`);
+    if (["auto", "Copilot default"].includes(ai.provider.model)) {
+      console.log("    Note: Copilot may switch models between requests, so feedback can vary.");
+      console.log("    For more consistent feedback, set COPILOT_MODEL to a fixed model (see README).");
+    }
   } else {
     console.log("  ! The AI tutor isn't running. The app still works, but gives example feedback");
     console.log("    instead of AI feedback until Copilot is set up (see README).");

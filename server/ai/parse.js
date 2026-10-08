@@ -38,6 +38,7 @@ export function normaliseFeedback(raw, { allowModel = false } = {}) {
         label: str(i.label, 150),
         status: STATUSES.has(i.status) ? i.status : "developing",
         comment: str(i.comment, 500),
+        ...(i.unchanged === true ? { unchanged: true } : {}),
       }))
       .filter((i) => i.label || i.comment),
     question: str(obj.question, 400),

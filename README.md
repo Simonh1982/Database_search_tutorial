@@ -111,15 +111,38 @@ allowance. Set them as Codespaces secrets, or before `npm start` (e.g. `AI_DAILY
 | Setting | Default | What it does |
 |---|---|---|
 | `AI_PROVIDER` | `copilot` | Which AI to use (`mock` = no AI, for testing) |
-| `COPILOT_MODEL` | cheapest "mini" model | Which Copilot model to use. `npm run models` lists them with their cost |
+| `COPILOT_MODEL` | cheapest "mini" model, or the first fixed model that answers | Which Copilot model to use. `npm run models` lists them with their cost |
 | `AI_DAILY_LIMIT` | `300` | AI requests per day, all visitors combined |
 | `AI_PER_IP_LIMIT` / `AI_PER_IP_WINDOW` | `40` per `60` min | AI requests per visitor |
 | `DEMO_PASSCODE` | none | Passcode required for AI feedback |
 | `ALLOWED_ORIGINS` | the Pages site and localhost | Websites allowed to call the server |
 | `NCBI_API_KEY` | none | Optional NCBI key for higher MeSH/PubMed look-up limits |
 
-To keep each request small and cheap, the server sends only the current stage's work, with each
-stage's instructions, and starts a fresh conversation every time. It never sends a long chat history.
+Each request contains only the current stage's work, the tutor's instructions, and a short record
+of earlier feedback (see below), so requests stay small and cheap.
+
+## How the tutor stays consistent
+
+AI models don't remember earlier conversations, and they can give different answers to the same
+question. To stop the tutor contradicting itself:
+
+- **It sees its earlier feedback.** Each request includes the student's last three attempts at
+  the stage, with the feedback given each time, and the latest feedback on earlier stages.
+- **Changes are worked out in code.** The server compares the new work with the previous attempt.
+  Anything the tutor called good last time that the student hasn't changed is listed as "already
+  approved". It stays "Good", keeps its earlier comment, and is marked *Unchanged since your last
+  submission*, whatever the AI says the second time.
+- **Identical resubmissions aren't sent to the AI.** The student sees the same feedback again,
+  which also saves Copilot allowance. (The exception is attempt 3, when a worked example first
+  becomes available.)
+- **The overall verdict matches the items.** If every item is good, the verdict is "Strong".
+- **A fixed model is used where possible.** Copilot's "auto" setting can switch models between
+  requests, so the tutor tries fixed models first. To choose one yourself, set the
+  `COPILOT_MODEL` Codespaces secret (e.g. `gpt-5-mini`). On a Copilot Free account it also
+  helps to turn off **Evaluation models in Copilot auto model selection** at
+  <https://github.com/settings/copilot>.
+
+The rules the tutor follows about consistency are in `skills/tutor/SKILL.md`.
 
 ## Changing what the tutor teaches
 

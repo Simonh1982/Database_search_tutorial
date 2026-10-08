@@ -14,6 +14,7 @@ const STAGES = [
 ];
 const MAX_CONCEPTS = 5;
 const MODEL_ANSWER_FROM_ATTEMPT = 3;
+const HISTORY_SENT = 3; // previous attempts per stage the tutor sees
 const STATE_KEY = "dst-state-v1";
 
 // ---------- State ----------
@@ -32,6 +33,7 @@ function freshState() {
     finalCount: null, // { query, count, warnings, queryTranslation }
     feedback: {}, // stage -> { feedback, source, notice, attempt, provider, model }
     attempts: {}, // stage -> number
+    history: {}, // stage -> [{ attempt, work, feedback }] – live AI feedback only, sent back as context
   };
 }
 
@@ -214,7 +216,13 @@ function feedbackPanel(n) {
                 "li",
                 { class: `item ${i.status}` },
                 h("span", { class: `status-chip ${i.status}`, text: STATUS_LABELS[i.status] || i.status }),
-                h("div", {}, h("p", { class: "item-label", text: i.label }), h("p", { class: "item-comment", text: i.comment })),
+                h(
+                  "div",
+                  {},
+                  h("p", { class: "item-label", text: i.label }),
+                  h("p", { class: "item-comment", text: i.comment }),
+                  i.unchanged ? h("p", { class: "item-note", text: "Unchanged since your last submission" }) : null,
+                ),
               ),
             ),
           )
@@ -232,6 +240,17 @@ function feedbackPanel(n) {
   return panel;
 }
 
+// What the tutor said before: earlier attempts at this stage, and the latest feedback on earlier stages.
+function tutorContext(n) {
+  const history = (state.history[n] || []).slice(-HISTORY_SENT);
+  const earlier = [];
+  for (let s = 1; s < n; s += 1) {
+    const last = (state.history[s] || []).at(-1);
+    if (last) earlier.push({ stage: s, feedback: last.feedback });
+  }
+  return { history, earlier };
+}
+
 async function submitFeedback(n, data, button) {
   const attempt = (state.attempts[n] || 0) + 1;
   const original = button.textContent;
@@ -239,9 +258,12 @@ async function submitFeedback(n, data, button) {
   button.textContent = connection.mode === "live" ? "The tutor is reading your work…" : "Checking…";
   button.setAttribute("aria-busy", "true");
   try {
-    const result = await requestFeedback(n, data, attempt);
+    const result = await requestFeedback(n, data, attempt, tutorContext(n));
     state.attempts[n] = attempt;
     state.feedback[n] = { ...result, attempt };
+    if (result.source === "live") {
+      state.history[n] = [...(state.history[n] || []), { attempt, work: data, feedback: result.feedback }].slice(-HISTORY_SENT);
+    }
   } catch (err) {
     state.feedback[n] = { error: err.message, errorCode: err.body?.code, attempt };
   } finally {

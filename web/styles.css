@@ -716,6 +716,11 @@ ul.alert {
   margin: 2px 0 0;
   font-size: 0.93rem;
 }
+.item-note {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 .fb-block {
   margin: 12px 0;
 }

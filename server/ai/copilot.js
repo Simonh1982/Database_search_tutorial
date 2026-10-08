@@ -7,8 +7,10 @@ import { join } from "node:path";
 
 const rejectTools = () => ({ kind: "reject", feedback: "Tools are not available in this tutor." });
 
-// Copilot's own automatic model choice, used when no model list is available.
+// Copilot's own automatic model choice. It can switch models between requests, which makes
+// feedback less consistent, so fixed models are tried first when no model list is available.
 export const AUTO_MODEL = "auto";
+export const FIXED_MODELS_TO_TRY = ["gpt-5-mini", "gpt-4.1"];
 
 // Prefer an inexpensive "mini" model; otherwise the lowest-cost model available.
 // Returns "" when the list is empty, meaning "let Copilot choose".
@@ -88,7 +90,7 @@ export function createCopilotProvider({ token = "", model = "" } = {}) {
         // Some accounts (e.g. Copilot Free) return an empty model list; then let Copilot choose.
         const models = await client.listModels().catch(() => []);
         const picked = chooseModel(models, model);
-        const candidates = picked ? [picked] : [AUTO_MODEL, ""];
+        const candidates = picked ? [picked] : [...FIXED_MODELS_TO_TRY, AUTO_MODEL, ""];
 
         // Send one tiny test message so "ready" really means Copilot answers.
         let lastError;

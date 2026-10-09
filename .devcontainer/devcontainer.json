@@ -2,7 +2,8 @@
   "name": "Database Search Tutorial",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
   "postCreateCommand": "npm install",
-  "postAttachCommand": "npm start",
+  "postStartCommand": "bash scripts/start-tutor.sh --background",
+  "postAttachCommand": "bash scripts/start-tutor.sh --watch",
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {

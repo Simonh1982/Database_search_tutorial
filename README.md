@@ -16,7 +16,7 @@ Students work through five stages, getting tutor feedback at each one:
 ```
  Colleague's browser                                Your Codespace (on GitHub)
 ┌──────────────────────────────┐      HTTPS      ┌──────────────────────────────────────┐
-│ GitHub Pages (public site)   │ ──────────────▶ │ Tutor server (npm start)             │
+│ GitHub Pages (public site)   │ ──────────────▶ │ Tutor server (starts automatically)  │
 │ simonh1982.github.io/...     │                 │  ├─ GitHub Copilot SDK ──▶ Copilot AI│
 │                              │ ◀────────────── │  │    (your Copilot allowance)       │
 │ No server reachable?         │    feedback     │  ├─ skills/*.md  (teaching rules)    │
@@ -81,8 +81,8 @@ below). For a demo session, raise this in **GitHub → Settings → Codespaces �
 
 1. On the repository page, click **Code → Codespaces**. Re-open your existing Codespace (its
    address stays the same), or create one on `main`.
-2. The tutor server starts automatically in the terminal. Check it says
-   `✓ Using copilot (model name) as your-username`.
+2. The tutor starts automatically whenever the Codespace starts, and its output appears in the
+   terminal. Check it says `✓ Using copilot (model name) as your-username`.
 3. In the terminal, run:
 
    ```bash
@@ -93,7 +93,14 @@ below). For a demo session, raise this in **GitHub → Settings → Codespaces �
    `https://simonh1982.github.io/Database_search_tutorial/?backend=…`. Send that link to colleagues.
    Their browser remembers the server, so later visits to the plain address also connect.
 4. When you've finished, stop the Codespace (**Code → Codespaces → … → Stop codespace**), or let it
-   time out. Visitors then get the offline demo.
+   time out. Visitors then get the offline demo, or a **Wake the tutor** button if it's set up
+   (see below).
+
+**After updating the code** (`git pull`), restart the tutor with `npm run tutor`. The tutor runs in
+the background: pressing **Ctrl + C** only stops *showing* its output, not the tutor itself.
+If an update changes `.devcontainer/devcontainer.json` (the Codespace's set-up), rebuild once:
+press **Ctrl + Shift + P** (**Cmd + Shift + P** on a Mac), type `Rebuild Container`, and choose
+**Codespaces: Rebuild Container**. Your files and the Codespace's name are kept.
 
 **Tip:** if you always reuse the same Codespace, you can put its address in `web/config.js`.
 The plain Pages address then connects without needing the `?backend=` part.
@@ -105,6 +112,71 @@ it down when nobody has used it for a while: 30 minutes by default. Visitors to 
 page don't count as activity. While it's stopped, the tutor server isn't running, so the page
 shows **Offline demo · example feedback**. Restarting the Codespace (step 1 above) brings it back
 at the same address, so links you've already shared still work.
+
+Stopped Codespaces are **deleted after 30 days** of not being used (GitHub's default retention
+period). If that happens, create a new one; it gets a new name and address, so update
+`web/config.js` and the wake-up button's `CODESPACE_NAME`.
+
+## Wake-up button
+
+With this set up, colleagues see **"The AI tutor is asleep – Wake the tutor"** on the public page
+when your Codespace is stopped. One click starts it; the page connects by itself when the tutor is
+ready (usually 1–2 minutes).
+
+**How it works:** the button calls a tiny "doorbell" program on **Cloudflare Workers** (free).
+The doorbell holds a GitHub key that can only check and start your Codespaces; the key never
+reaches the browser. The doorbell's code is in `wake/worker.js`.
+
+### A. Create the GitHub key
+
+1. GitHub → your profile picture → **Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → Generate new token**.
+2. **Token name:** `Tutor wake-up`. **Expiration:** your choice (e.g. 90 days).
+3. **Repository access:** **Only select repositories** → `Database_search_tutorial`.
+4. **Permissions → Repository permissions:**
+   - **Codespaces:** Read-only
+   - **Codespaces lifecycle admin:** Read and write
+5. **Generate token** and copy it (it starts `github_pat_`).
+
+### B. Create the doorbell on Cloudflare
+
+1. Sign up (free) at <https://dash.cloudflare.com/sign-up> and verify your email address.
+2. In the left-hand menu, open **Workers & Pages** (sometimes under **Compute**), then click
+   **Create** → **Create Worker** (or **Start with Hello World!**).
+3. Name it `tutor-wake` and click **Deploy**.
+4. Click **Edit code**. Delete everything in the editor, then paste in the whole of
+   [`wake/worker.js`](wake/worker.js) (open it on GitHub and use the **Copy raw file** button).
+   Click **Deploy**.
+5. Go back to the Worker, open **Settings → Variables and Secrets**, and add these four:
+
+   | Type | Name | Value |
+   |---|---|---|
+   | Secret | `GITHUB_TOKEN` | the key from part A |
+   | Text | `CODESPACE_NAME` | your Codespace's name (shown as `Codespace name:` when the tutor starts) |
+   | Text | `ALLOWED_ORIGIN` | `https://simonh1982.github.io` |
+   | Secret | `WAKE_PASSCODE` | optional: a passcode colleagues must enter (can be the same as `DEMO_PASSCODE`) |
+
+   Save or **Deploy** when asked.
+6. Copy the Worker's address, shown on its overview page, e.g.
+   `https://tutor-wake.your-name.workers.dev`.
+7. **Test it:** open that address followed by `/status` in your browser. You should see something
+   like `{"state":"Available"}` or `{"state":"Shutdown"}`. If you see an error, it names what's
+   missing (for example a token permission).
+
+### C. Connect the page to the doorbell
+
+In `web/config.js`, set `WAKE_URL` to the Worker's address and `DEFAULT_BACKEND` to your
+Codespace's address (shown as `Codespace address:` when the tutor starts). After the change
+reaches `main`, the public page offers the wake-up button whenever the tutor is asleep.
+
+**Good to know:**
+- Each wake-up uses your Codespace hours until it goes back to sleep (after the idle timeout).
+  The passcode stops strangers waking it.
+- When the Codespace is woken remotely, nobody has it open, so it goes back to sleep after the idle
+  timeout even if colleagues are using it. The page then offers the wake-up button again.
+- After waking, the port must still be **Public** for the page to connect. The Codespace tries to
+  set this automatically when it starts. If the page never connects after waking, open the
+  Codespace, go to the **PORTS** tab and check port 3000 is set to Public.
 
 ## Cost and safety controls
 
@@ -171,7 +243,8 @@ web/                 The web app (static files, published to GitHub Pages)
 server/              The tutor server (Node.js), run in the Codespace
   ai/                Copilot and mock providers; prompt building; reply parsing
 skills/              The tutor's teaching instructions, one folder per stage
-scripts/             `npm run share` and `npm run models`
+scripts/             `npm run tutor`, `npm run share` and `npm run models`
+wake/                The "Wake the tutor" doorbell, deployed on Cloudflare Workers
 test/                Automated tests (`npm test`)
 .devcontainer/       Codespace setup: installs dependencies and starts the server
 ```

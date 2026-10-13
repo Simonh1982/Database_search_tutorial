@@ -195,11 +195,24 @@ When the tutor starts, it switches port 3000 to Public itself, usually within 10
 To check what happened, open a terminal in the Codespace and run:
 
 ```bash
-cat /tmp/tutor-port.log
+cat .tutor/port.log
 ```
 
 - `[port] Port 3000 is Public (attempt 1).` means it worked.
 - `[port] Couldn't make port 3000 Public automatically: …` explains why it didn't.
+
+**If waking doesn't work,** these files in the Codespace (kept across restarts) show what happened:
+
+```bash
+cat .tutor/start.log
+```
+
+```bash
+tail -20 .tutor/tutor.log
+```
+
+`start.log` records each time the Codespace started the tutor; `tutor.log` is the tutor's own
+output.
 
 **Good to know:**
 - Each wake-up uses your Codespace hours until it goes back to sleep (after the idle timeout).
@@ -208,7 +221,7 @@ cat /tmp/tutor-port.log
   timeout even if colleagues are using it. The page then offers the wake-up button again.
 - If the page sits at "nearly ready" for more than a minute or two, the port is still Private:
   open the Codespace, go to the **PORTS** tab, right-click port 3000 and choose
-  **Port Visibility → Public**, then check `/tmp/tutor-port.log` as described above.
+  **Port Visibility → Public**, then check `.tutor/port.log` as described above.
 
 ## Cost and safety controls
 

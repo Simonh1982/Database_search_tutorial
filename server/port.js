@@ -5,9 +5,12 @@
 // The tutor server runs this itself as soon as it starts.
 
 import { execFile } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const STATUS_FILE = "/tmp/tutor-port.log";
+// Kept in the project's .tutor/ folder, which survives Codespace restarts.
+export const STATUS_FILE = fileURLToPath(new URL("../.tutor/port.log", import.meta.url));
 
 // The latest port message, shown by /api/health (check it in the Codespace with
 // `curl -s localhost:3000/api/health`).
@@ -31,6 +34,7 @@ function record(message, log) {
   portStatus.message = message;
   log(line);
   try {
+    mkdirSync(dirname(STATUS_FILE), { recursive: true });
     appendFileSync(STATUS_FILE, `${new Date().toISOString()} ${line}\n`);
   } catch {
     // The status file is only a convenience for checking what happened.

@@ -263,13 +263,16 @@ async function main() {
     if (config.codespaceName) makePortPublic({ codespaceName: config.codespaceName, port: config.port, token: config.portsToken });
   });
 
-  const shutdown = async () => {
+  const shutdown = async (signal) => {
+    console.log(`${new Date().toISOString()} The tutor is stopping (${signal}).`);
     server.close();
     await ai.provider?.stop();
     process.exit(0);
   };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // A closing terminal sends SIGHUP; keep running (the tutor runs unattended in the Codespace).
+  process.on("SIGHUP", () => console.log(`${new Date().toISOString()} Ignored SIGHUP; still running.`));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === normalize(process.argv[1])) {

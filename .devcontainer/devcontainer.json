@@ -5,7 +5,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "postCreateCommand": "npm install",
-  "postStartCommand": "bash scripts/start-tutor.sh --background",
+  "postStartCommand": "bash scripts/start-tutor.sh --foreground",
   "postAttachCommand": "bash scripts/start-tutor.sh --watch",
   "forwardPorts": [3000],
   "portsAttributes": {

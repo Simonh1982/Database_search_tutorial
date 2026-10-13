@@ -138,6 +138,7 @@ export async function wakeTutor(onProgress = () => {}) {
 
   const started = Date.now();
   let state = rung.state || "Starting";
+  let lastRing = Date.now();
   for (let check = 0; Date.now() - started < 5 * 60_000; check += 1) {
     onProgress(Math.round((Date.now() - started) / 1000), state);
     try {
@@ -151,6 +152,12 @@ export async function wakeTutor(onProgress = () => {}) {
     if (check % 3 === 2) {
       try {
         state = (await fetchJson(`${doorbell}/status`, {}, 10_000)).state || state;
+        // If it was still shutting down when we rang, it may now be fully stopped: ring again.
+        if (state === "Shutdown" && Date.now() - lastRing > 30_000) {
+          lastRing = Date.now();
+          const again = await fetchJson(`${doorbell}/wake`, { method: "POST", headers: connection.passcode ? { "X-Wake-Passcode": connection.passcode } : {} }, 20_000);
+          state = again.state || state;
+        }
       } catch {
         // Keep the last known state.
       }

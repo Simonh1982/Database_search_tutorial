@@ -172,7 +172,7 @@ reaches `main`, the public page offers the wake-up button whenever the tutor is 
 ### D. Let the Codespace make its port Public
 
 Port 3000 goes back to **Private** every time the Codespace restarts, which hides the tutor from
-the public page. The start-up script switches it back to Public, but changing port settings needs
+the public page. The tutor switches it back to Public when it starts, but changing port settings needs
 a key with the right permission:
 
 1. GitHub → your profile picture → **Settings → Developer settings → Personal access tokens →

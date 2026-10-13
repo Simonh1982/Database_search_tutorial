@@ -32,6 +32,8 @@ export function loadConfig(env = process.env) {
       model: env.COPILOT_MODEL || "",
     },
     ncbiApiKey: env.NCBI_API_KEY || "",
+    // Key with the "codespace" scope, used to make the port Public after the Codespace restarts.
+    portsToken: env.GH_PORTS_TOKEN || "",
 
     // Who may call the API from a browser. The Pages site and local use are allowed by default.
     allowedOrigins: list(env.ALLOWED_ORIGINS, `${new URL(pagesUrl).origin},http://localhost:3000,http://127.0.0.1:3000`),

@@ -17,7 +17,7 @@ PAGES="${PAGES_URL:-https://${OWNER}.github.io/${REPO#*/}/}"
 LINK="${PAGES}?backend=$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$BACKEND")"
 
 echo
-if gh codespace ports visibility "${PORT}:public" -c "$CODESPACE_NAME" >/dev/null 2>&1; then
+if GH_TOKEN="${GH_PORTS_TOKEN:-${GH_TOKEN:-}}" gh codespace ports visibility "${PORT}:public" -c "$CODESPACE_NAME" >/dev/null 2>&1; then
   echo "Port ${PORT} is now public."
 else
   echo "Couldn't make port ${PORT} public automatically. Please do it by hand:"

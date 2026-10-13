@@ -191,11 +191,15 @@ The Codespace's set-up installs the GitHub command-line tool (`gh`), which does 
 your Codespace was created before this was added, rebuild it once (**Ctrl + Shift + P** →
 **Codespaces: Rebuild Container**).
 
-The tutor's output (shown when you open the Codespace) then includes one of these lines, about a
-minute after start-up:
+When the tutor starts, it switches port 3000 to Public itself, usually within 10–20 seconds.
+To check what happened, open a terminal in the Codespace and run:
 
-- `[start-up] Port 3000 is Public, so the web page can reach the tutor.`, which means it worked.
-- `[start-up] Couldn't make port 3000 Public automatically: …`, which explains why.
+```bash
+cat /tmp/tutor-port.log
+```
+
+- `[port] Port 3000 is Public (attempt 1).` means it worked.
+- `[port] Couldn't make port 3000 Public automatically: …` explains why it didn't.
 
 **Good to know:**
 - Each wake-up uses your Codespace hours until it goes back to sleep (after the idle timeout).
@@ -204,7 +208,7 @@ minute after start-up:
   timeout even if colleagues are using it. The page then offers the wake-up button again.
 - If the page sits at "nearly ready" for more than a minute or two, the port is still Private:
   open the Codespace, go to the **PORTS** tab, right-click port 3000 and choose
-  **Port Visibility → Public**, then check the `[start-up]` line in the tutor's output.
+  **Port Visibility → Public**, then check `/tmp/tutor-port.log` as described above.
 
 ## Cost and safety controls
 

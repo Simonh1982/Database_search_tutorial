@@ -72,6 +72,24 @@ test("a passcode is required when one is set", async () => {
   assert.equal(allowed.status, 200);
 });
 
+test("'already running' (409) is treated as fine, without a misleading permissions note", async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push(url);
+    if (url.endsWith("/start")) {
+      return new Response(JSON.stringify({ message: "The codespace is already running" }), {
+        status: 409,
+        headers: { "x-accepted-github-permissions": "codespaces_lifecycle_admin=write" },
+      });
+    }
+    return new Response(JSON.stringify({ state: "ShuttingDown" }), { status: 200 });
+  };
+  const res = await call("/wake", { method: "POST" });
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { state: "ShuttingDown", started: false });
+  assert.equal(calls.length, 2);
+});
+
 test("setup problems are explained, including missing token permissions", async () => {
   const missing = await call("/status", {}, { ALLOWED_ORIGIN: ORIGIN });
   assert.equal(missing.status, 500);

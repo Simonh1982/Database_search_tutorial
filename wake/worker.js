@@ -52,9 +52,12 @@ async function github(env, path, method = "GET") {
     // Some responses have no body.
   }
   if (!res.ok) {
-    // GitHub names the permission a token is missing in this header, which makes setup errors easy to fix.
-    const needed = res.headers.get("x-accepted-github-permissions");
-    throw new Error(`GitHub said ${res.status} (${body.message || "error"})${needed ? `. The token needs these permissions: ${needed}` : ""}`);
+    // For access problems, GitHub names the permission the token needs in this header, which makes
+    // setup errors easy to fix. (It sends the header on other errors too, so only mention it here.)
+    const needed = [401, 403, 404].includes(res.status) ? res.headers.get("x-accepted-github-permissions") : "";
+    const err = new Error(`GitHub said ${res.status} (${body.message || "error"})${needed ? `. The token needs these permissions: ${needed}` : ""}`);
+    err.status = res.status;
+    throw err;
   }
   return body;
 }
@@ -96,8 +99,15 @@ export default {
         }
         const cs = await github(env, codespace);
         if (AWAKE.has(cs.state) || ON_THE_WAY.has(cs.state)) return reply({ state: cs.state, started: false }, 200, origin);
-        const started = await github(env, `${codespace}/start`, "POST");
-        return reply({ state: started.state || "Starting", started: true }, 200, origin);
+        try {
+          const started = await github(env, `${codespace}/start`, "POST");
+          return reply({ state: started.state || "Starting", started: true }, 200, origin);
+        } catch (err) {
+          // 409 means GitHub is already starting it, or it's still shutting down. Not an error:
+          // the page keeps waiting and rings again if the Codespace ends up stopped.
+          if (err.status === 409) return reply({ state: cs.state, started: false }, 200, origin);
+          throw err;
+        }
       }
 
       return reply({ error: "Not found." }, 404, origin);

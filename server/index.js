@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig, codespaceUrl } from "./config.js";
 import { DailyCounter, WindowLimiter } from "./rateLimit.js";
 import { startAI, getFeedback } from "./ai/index.js";
+import { makePortPublic, portStatus } from "./port.js";
 import { searchMesh, countPubMed } from "../web/shared/ncbi.js";
 
 const WEB_DIR = fileURLToPath(new URL("../web/", import.meta.url));
@@ -112,6 +113,7 @@ export function createApp(config, { ai = { provider: null, errors: [] }, fetchIm
       },
       passcodeRequired: Boolean(config.passcode),
       aiRequestsLeftToday: aiDaily.remaining(),
+      ...(portStatus.message ? { port: portStatus.message } : {}),
     }),
 
     "POST /api/feedback": async (req) => {
@@ -257,6 +259,8 @@ async function main() {
       console.log(`  ${config.pagesUrl}?backend=${encodeURIComponent(publicUrl)}`);
     }
     if (config.passcode) console.log("A passcode is required for AI feedback (DEMO_PASSCODE).");
+    // Ports go back to Private when the Codespace restarts; switch ours back so the page can connect.
+    if (config.codespaceName) makePortPublic({ codespaceName: config.codespaceName, port: config.port, token: config.portsToken });
   });
 
   const shutdown = async () => {

@@ -12,14 +12,37 @@ cd "$(dirname "$0")/.." || exit 1
 LOG=/tmp/tutor.log
 MODE="${1:-}"
 
+# Port 3000 goes back to Private whenever the Codespace restarts, which hides the tutor from the
+# public web page. This sets it to Public again, retrying while the Codespace finishes starting.
+# Changing port visibility needs a key with the "codespace" scope, stored as the GH_PORTS_TOKEN
+# Codespaces secret (see README, "Wake-up button"); without it, the Codespace's own key is tried.
+make_port_public() {
+  local attempts="${PORT_RETRIES:-18}" output=""
+  for _ in $(seq 1 "$attempts"); do
+    sleep "${PORT_RETRY_SECONDS:-10}"
+    if output=$(GH_TOKEN="${GH_PORTS_TOKEN:-${GH_TOKEN:-}}" gh codespace ports visibility 3000:public -c "$CODESPACE_NAME" 2>&1); then
+      echo "[start-up] Port 3000 is Public, so the web page can reach the tutor." >>"$LOG"
+      return 0
+    fi
+  done
+  {
+    echo "[start-up] Couldn't make port 3000 Public automatically: ${output:-no details}"
+    echo "[start-up] To fix: add the GH_PORTS_TOKEN Codespaces secret (see README, \"Wake-up button\"),"
+    echo "[start-up] or set it by hand: PORTS tab, right-click port 3000, Port Visibility, Public."
+  } >>"$LOG"
+  return 1
+}
+
 if [ "$MODE" != "--watch" ]; then
   pkill -f '^node server/index\.js' 2>/dev/null && sleep 1
-  setsid nohup node server/index.js >"$LOG" 2>&1 </dev/null &
+  : >"$LOG"
+  setsid nohup node server/index.js >>"$LOG" 2>&1 </dev/null &
   echo "The tutor is starting in the background."
 
-  # Make port 3000 reachable from the public web page (best effort; see README if it isn't).
   if [ -n "${CODESPACE_NAME:-}" ] && command -v gh >/dev/null 2>&1; then
-    (sleep 20; gh codespace ports visibility 3000:public -c "$CODESPACE_NAME" >/dev/null 2>&1) </dev/null >/dev/null 2>&1 &
+    export -f make_port_public
+    export LOG
+    setsid nohup bash -c make_port_public </dev/null >/dev/null 2>&1 &
   fi
 fi
 

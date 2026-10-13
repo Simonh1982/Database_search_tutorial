@@ -858,3 +858,8 @@ dialog .actions {
 .wake-passcode input {
   max-width: 220px;
 }
+.wake-hint {
+  margin-top: 8px !important;
+  font-size: 0.9rem;
+  color: var(--muted);
+}

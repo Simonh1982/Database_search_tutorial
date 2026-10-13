@@ -169,14 +169,38 @@ In `web/config.js`, set `WAKE_URL` to the Worker's address and `DEFAULT_BACKEND`
 Codespace's address (shown as `Codespace address:` when the tutor starts). After the change
 reaches `main`, the public page offers the wake-up button whenever the tutor is asleep.
 
+### D. Let the Codespace make its port Public
+
+Port 3000 goes back to **Private** every time the Codespace restarts, which hides the tutor from
+the public page. The start-up script switches it back to Public, but changing port settings needs
+a key with the right permission:
+
+1. GitHub → your profile picture → **Settings → Developer settings → Personal access tokens →
+   Tokens (classic) → Generate new token (classic)**. (Classic tokens are needed here; the newer
+   fine-grained tokens can't change port settings.)
+2. **Note:** `Tutor ports`. **Expiration:** your choice (e.g. 90 days).
+3. Under **Select scopes**, tick **codespace** only. Leave everything else unticked.
+4. **Generate token** and copy it (it starts `ghp_`).
+5. GitHub → **Settings → Codespaces → Codespaces secrets → New secret**:
+   - **Name:** `GH_PORTS_TOKEN`
+   - **Value:** the token
+   - **Repository access:** `Database_search_tutorial`
+6. Stop and restart the Codespace so it picks up the secret.
+
+The tutor's output (shown when you open the Codespace) then includes one of these lines, about a
+minute after start-up:
+
+- `[start-up] Port 3000 is Public, so the web page can reach the tutor.`, which means it worked.
+- `[start-up] Couldn't make port 3000 Public automatically: …`, which explains why.
+
 **Good to know:**
 - Each wake-up uses your Codespace hours until it goes back to sleep (after the idle timeout).
   The passcode stops strangers waking it.
 - When the Codespace is woken remotely, nobody has it open, so it goes back to sleep after the idle
   timeout even if colleagues are using it. The page then offers the wake-up button again.
-- After waking, the port must still be **Public** for the page to connect. The Codespace tries to
-  set this automatically when it starts. If the page never connects after waking, open the
-  Codespace, go to the **PORTS** tab and check port 3000 is set to Public.
+- If the page sits at "nearly ready" for more than a minute or two, the port is still Private:
+  open the Codespace, go to the **PORTS** tab, right-click port 3000 and choose
+  **Port Visibility → Public**, then check the `[start-up]` line in the tutor's output.
 
 ## Cost and safety controls
 

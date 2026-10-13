@@ -970,6 +970,13 @@ function renderWakeBanner() {
         h("p", {
           text: `The tutor's computer is ${WAKE_STATES[wake.state] || "starting up"}. This usually takes 1–2 minutes. You can carry on working; feedback switches to the AI tutor when it's ready.`,
         }),
+        // Running for a while but still not answering usually means its port is still Private.
+        wake.state === "Available" && wake.seconds > 90
+          ? h("p", {
+              class: "wake-hint",
+              text: "This is taking longer than usual. The tutor is running but can't be reached yet, which usually means its connection is still set to private. If it doesn't connect soon, please let the person running the tutor know.",
+            })
+          : null,
       ),
     );
     return;

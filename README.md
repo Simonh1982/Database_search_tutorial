@@ -187,6 +187,10 @@ a key with the right permission:
    - **Repository access:** `Database_search_tutorial`
 6. Stop and restart the Codespace so it picks up the secret.
 
+The Codespace's set-up installs the GitHub command-line tool (`gh`), which does the switching. If
+your Codespace was created before this was added, rebuild it once (**Ctrl + Shift + P** →
+**Codespaces: Rebuild Container**).
+
 The tutor's output (shown when you open the Codespace) then includes one of these lines, about a
 minute after start-up:
 

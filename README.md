@@ -320,6 +320,13 @@ test/                Automated tests (`npm test`)
 .devcontainer/       Codespace setup: installs dependencies and starts the server
 ```
 
+## Publishing updates
+
+Merging into `main` republishes the web app to GitHub Pages automatically
+(`.github/workflows/pages.yml`). While publishing, `scripts/stamp-versions.sh` adds a version to
+each file address (`app.js?v=1a2b3c4d`), so browsers load the new files straight away instead of
+mixing them with older copies they kept.
+
 ## Development
 
 ```bash

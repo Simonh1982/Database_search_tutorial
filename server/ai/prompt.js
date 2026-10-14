@@ -58,9 +58,15 @@ export function sanitiseWork(stage, data = {}) {
   return notes ? { ...work, studentNotes: notes } : work;
 }
 
+// Which syntax the student writes their search in. Work from before the Ovid option was PubMed.
+export function databaseName(data = {}) {
+  return data.database === "ovid" ? "Ovid MEDLINE" : "PubMed";
+}
+
 function stageWork(stage, data) {
   const question = clip(data.question, 1000);
   const concepts = Array.isArray(data.concepts) ? data.concepts.slice(0, 5) : [];
+  const database = databaseName(data);
 
   switch (Number(stage)) {
     case 1:
@@ -70,16 +76,19 @@ function stageWork(stage, data) {
     case 3:
       return {
         researchQuestion: question,
+        database,
         concepts: concepts.map((c) => ({ concept: clip(c?.concept, 150), alternativeTerms: clipList(c?.synonyms, 40, 120) })),
       };
     case 4:
       return {
         researchQuestion: question,
+        database,
         concepts: concepts.map((c) => ({
           concept: clip(c?.concept, 150),
           studentSaysNoSuitableHeading: Boolean(c?.noHeading),
           selectedHeadings: (Array.isArray(c?.headings) ? c.headings : []).slice(0, 5).map((h) => ({
             heading: clip(h?.heading, 150),
+            exploded: h?.explode !== false,
             meshId: clip(h?.ui, 20),
             scopeNote: clip(h?.scopeNote, 500),
             treeNumbers: clipList(h?.treeNumbers, 6, 40),
@@ -87,8 +96,31 @@ function stageWork(stage, data) {
         })),
       };
     case 5:
+      if (data.database === "ovid") {
+        return {
+          researchQuestion: question,
+          database,
+          searchHistory: (Array.isArray(data.searchHistory) ? data.searchHistory : []).slice(0, 30).map((l) => ({
+            line: Number.parseInt(l?.line, 10) || 0,
+            search: clip(l?.search, 1500),
+            pubmedResults: Number.isFinite(l?.count) ? l.count : "not run",
+            ...(l?.error ? { translationProblem: clip(l.error, 300) } : {}),
+          })),
+          blocks: (Array.isArray(data.blocks) ? data.blocks : []).slice(0, 5).map((b) => ({
+            concept: clip(b?.concept, 150),
+            searchLine: clip(b?.query, 2000),
+            pubmedResults: Number.isFinite(b?.count) ? b.count : "not run",
+          })),
+          operatorsBetweenBlocks: clipList(data.operators, 4, 5),
+          pubmedTranslation: clip(data.pubmedTranslation, 4000),
+          translationNotes: clipList(data.translationNotes, 15, 400),
+          finalPubmedResults: Number.isFinite(data.count) ? data.count : "not run",
+          pubmedWarnings: clipList(data.warnings, 5, 300),
+        };
+      }
       return {
         researchQuestion: question,
+        database,
         blocks: (Array.isArray(data.blocks) ? data.blocks : []).slice(0, 5).map((b) => ({
           concept: clip(b?.concept, 150),
           searchLine: clip(b?.query, 1500),

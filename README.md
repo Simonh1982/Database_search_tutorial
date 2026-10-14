@@ -1,7 +1,8 @@
 # Database Search Tutorial
 
 An interactive, AI-guided tutorial that teaches students the fundamentals of searching biomedical
-bibliographic databases such as PubMed. **This is a proof of concept** for showing colleagues.
+bibliographic databases. Students write their search for **Ovid MEDLINE** (the default, as taught
+at Imperial) or **PubMed**. **This is a proof of concept** for showing colleagues.
 
 Students work through five stages, getting tutor feedback at each one:
 
@@ -10,6 +11,30 @@ Students work through five stages, getting tutor feedback at each one:
 3. **Alternative terms:** synonyms, abbreviations, spelling variants and truncation
 4. **MeSH:** look up real Medical Subject Headings and choose the right ones
 5. **Search strategy:** combine everything with AND / OR / NOT and see live PubMed result counts
+
+## Ovid MEDLINE and PubMed
+
+From stage 3, a switch above each stage chooses the database the student writes their search for.
+Ovid MEDLINE is selected first; the choice is remembered in the student's browser.
+
+- **Stage 3** shows the key operators for the chosen database (truncation, wildcards, phrases and
+  proximity) and checks each term as it's typed, for example `$` or `#` in PubMed, or fewer than
+  4 letters before `*`.
+- **Stage 4** has an **Explode** tick box for each heading, shown as `exp Heading/` in Ovid or
+  `"Heading"[Mesh]` (`[Mesh:NoExp]` when unticked) in PubMed.
+- **Stage 5** in Ovid shows a numbered Ovid search history to copy into Ovid. Ovid can't be
+  searched from the app, so each line is translated into PubMed syntax and counted in PubMed. The
+  translation is in a closed **PubMed translation** section, with every change marked:
+  - **Same**: an exact equivalent, e.g. `exp Child/` → `"Child"[Mesh]`, `.ti,ab.` → `[tiab]`.
+  - **Listed**: Ovid symbols PubMed lacks are listed as word forms, e.g. `p?ediatric*` →
+    `paediatric* OR pediatric*`, `boy*1` → `boy OR boys`.
+  - **Close**: may find slightly different records, e.g. `migraine adj3 attack*` →
+    `"migraine attack"[tiab:~2] OR "migraine attacks"[tiab:~2]` (PubMed can't use `*` in
+    proximity searches, and `adj3` allows 2 words between, which is `~2`).
+- Switching database offers to convert the terms already typed. Nothing changes without asking.
+
+The translator is ordinary code (`web/shared/ovid.js`), not AI, so it's instant, free and gives the
+same answer every time. Its rules are tested in `test/ovid.test.js`.
 
 ## How it works
 
@@ -284,7 +309,8 @@ web/                 The web app (static files, published to GitHub Pages)
   app.js             The five stages
   api.js             Connects to the tutor server, or falls back to the offline demo
   config.js          Optional default server address
-  shared/            Code used by both browser and server (NCBI look-ups, search syntax, demo feedback)
+  shared/            Code used by both browser and server (NCBI look-ups, search syntax,
+                     Ovid-to-PubMed translation, demo feedback)
 server/              The tutor server (Node.js), run in the Codespace
   ai/                Copilot and mock providers; prompt building; reply parsing
 skills/              The tutor's teaching instructions, one folder per stage
@@ -308,5 +334,8 @@ npm test
 - The server keeps rate limits in memory, so they reset when it restarts.
 - In the offline demo, MeSH and PubMed look-ups go straight from the browser to NCBI. If a network
   blocks this, they work only while the Codespace is connected.
+- Ovid result counts are counted in PubMed, so they are close to Ovid's figures but not the same.
+  The translator doesn't handle Ovid limits, subheadings (`/dt`), `.fs.` or `/freq`; these are
+  flagged rather than translated.
 - Feedback comes from AI and can be wrong. The tutor is told to rely only on the MeSH data and
   result counts the app supplies, but librarians should review its responses before wider use.

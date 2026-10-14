@@ -90,3 +90,23 @@ test("demo feedback flags generic words and OR between concepts", () => {
   assert.equal(s5.verdict, "developing");
   assert.match(s5.summary, /very broad/);
 });
+
+test("sanitiseWork tells the tutor which database the student uses", () => {
+  assert.equal(sanitiseWork(3, { database: "ovid", concepts: [] }).database, "Ovid MEDLINE");
+  assert.equal(sanitiseWork(3, { concepts: [] }).database, "PubMed");
+  const s4 = sanitiseWork(4, { concepts: [{ concept: "children", headings: [{ heading: "Adolescent", explode: false }, { heading: "Child" }] }] });
+  assert.deepEqual(s4.concepts[0].selectedHeadings.map((h) => h.exploded), [false, true]);
+  const s5 = sanitiseWork(5, {
+    database: "ovid",
+    searchHistory: [{ line: 1, search: "exp Child/", count: 10 }, { line: 2, search: "boy*1.ti,ab." }],
+    blocks: [{ concept: "children", query: "1 exp Child/ | 2 boy*1.ti,ab.", count: 12 }],
+    operators: [],
+    pubmedTranslation: '"Child"[Mesh] OR boy[tiab] OR boys[tiab]',
+    translationNotes: ["Line 2: boy*1 → boy OR boys."],
+    count: 12,
+  });
+  assert.equal(s5.database, "Ovid MEDLINE");
+  assert.deepEqual(s5.searchHistory[1], { line: 2, search: "boy*1.ti,ab.", pubmedResults: "not run" });
+  assert.equal(s5.blocks[0].pubmedResults, 12);
+  assert.deepEqual(s5.translationNotes, ["Line 2: boy*1 → boy OR boys."]);
+});

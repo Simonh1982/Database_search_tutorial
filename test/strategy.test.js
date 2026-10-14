@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildBlock, checkSyntax, combineBlocks, keywordTerm, parseTerms } from "../web/shared/strategy.js";
+import { buildBlock, checkSyntax, combineBlocks, dropCovered, keywordTerm, parseTerms } from "../web/shared/strategy.js";
 
 test("parseTerms splits lines and semicolons, keeps commas, and removes duplicates", () => {
   assert.deepEqual(parseTerms("child*\nkids; Kids;  young  people \n\n"), ["child*", "kids", "young people"]);
@@ -12,6 +12,7 @@ test("keywordTerm quotes phrases and keeps existing field tags", () => {
   assert.equal(keywordTerm("physical activity"), '"physical activity"[tiab]');
   assert.equal(keywordTerm('"physical activity"'), '"physical activity"[tiab]');
   assert.equal(keywordTerm("exercise[mh]"), "exercise[mh]");
+  assert.equal(keywordTerm('"migraine attack"[tiab:~2]'), '"migraine attack"[tiab:~2]');
 });
 
 test("buildBlock ORs MeSH and keywords without duplicates", () => {
@@ -39,4 +40,11 @@ test("checkSyntax spots unbalanced brackets, quotes and lower-case operators", (
   assert.equal(checkSyntax('"a OR b').length, 1);
   assert.match(checkSyntax("a and b").join(), /capitals/);
   assert.deepEqual(checkSyntax('"salt and pepper"[tiab]'), []);
+});
+
+test("dropCovered leaves out words a truncated term already finds", () => {
+  assert.deepEqual(dropCovered(["migraine", "migrain*"]), ["migrain*"]);
+  assert.deepEqual(dropCovered(["children", "child*", "p?ediatric*", "kids"]), ["child*", "p?ediatric*", "kids"]);
+  assert.deepEqual(dropCovered(["abdominal migraine", "migrain*"]), ["abdominal migraine", "migrain*"]);
+  assert.equal(buildBlock({ concept: "triptans", synonyms: ["triptan*", "sumatriptan"] }), "(triptan*[tiab] OR sumatriptan[tiab])");
 });

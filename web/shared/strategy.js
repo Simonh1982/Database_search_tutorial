@@ -20,17 +20,29 @@ export function parseTerms(text) {
 export function keywordTerm(term) {
   const t = String(term || "").trim();
   if (!t) return "";
-  if (/\[[a-z ]+\]$/i.test(t)) return t;
+  if (/\[[a-z /]+(:[a-z~0-9]+)?\]$/i.test(t)) return t;
   const bare = t.replace(/^"(.*)"$/, "$1");
   return /\s/.test(bare) ? `"${bare}"[tiab]` : `${bare}[tiab]`;
 }
 
-export function meshTerm(heading) {
+// A MeSH heading. PubMed explodes headings by default; `explode: false` adds :NoExp.
+export function meshTerm(heading, { explode = true } = {}) {
   const h = String(heading || "").trim();
-  return h ? `"${h}"[Mesh]` : "";
+  return h ? `"${h}"[Mesh${explode ? "" : ":NoExp"}]` : "";
+}
+
+// Leaves out single words already found by a truncated term in the list: "migraine" when
+// "migrain*" is there. Keeps the search shorter without changing what it finds.
+export function dropCovered(terms) {
+  const stems = terms.map((t) => String(t || "").trim().match(/^([a-z0-9-]+)[*$]$/i)?.[1]?.toLowerCase()).filter(Boolean);
+  return terms.filter((t) => {
+    const w = String(t || "").trim().toLowerCase();
+    return !/^[a-z0-9-]+$/.test(w) || !stems.some((stem) => w.startsWith(stem));
+  });
 }
 
 // One concept block: MeSH headings and keywords joined with OR, in brackets.
+// `meshHeadings` holds heading names or { heading, explode } objects.
 export function buildBlock({ concept = "", synonyms = [], meshHeadings = [] } = {}) {
   const parts = [];
   const seen = new Set();
@@ -41,8 +53,8 @@ export function buildBlock({ concept = "", synonyms = [], meshHeadings = [] } = 
       parts.push(p);
     }
   };
-  meshHeadings.forEach((h) => add(meshTerm(h)));
-  [concept, ...synonyms].forEach((t) => add(keywordTerm(t)));
+  meshHeadings.forEach((h) => add(typeof h === "string" ? meshTerm(h) : meshTerm(h?.heading, { explode: h?.explode !== false })));
+  dropCovered([concept, ...synonyms]).forEach((t) => add(keywordTerm(t)));
   if (parts.length === 0) return "";
   return parts.length === 1 ? parts[0] : `(${parts.join(" OR ")})`;
 }

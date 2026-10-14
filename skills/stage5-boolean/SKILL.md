@@ -1,6 +1,6 @@
 ---
 name: stage5-boolean
-description: Feedback on a student's complete Boolean search strategy and its PubMed result counts.
+description: Feedback on a student's complete Boolean search strategy (Ovid MEDLINE or PubMed) and its result counts.
 ---
 
 # Task
@@ -27,6 +27,27 @@ them, and the live PubMed result counts included in their work.
   truncation (`*`) covers word endings.
 - **Field tags:** `[Mesh]` for subject headings, `[tiab]` for words in the title or abstract.
 
+# Ovid MEDLINE search histories
+
+When `database` is "Ovid MEDLINE", the work is a numbered Ovid search history (`searchHistory`),
+as the student will build it in Ovid:
+
+- a line for each subject heading (`exp Heading/`, or `Heading/` when not exploded);
+- a keyword line searched in titles and abstracts, ending `.ti,ab.`;
+- a line combining each concept's lines with `or` (e.g. `5 or 6`, or `or/1-3`);
+- a final line combining the concepts by line number (e.g. `4 and 7 and 10`). Concepts joined
+  with `or` get their own `or` line first.
+
+The app builds these lines. The student can edit the keyword lines and chooses the operators.
+Discuss the strategy in Ovid syntax and refer to line numbers.
+
+Ovid can't be searched from the app, so each line is translated into PubMed syntax and counted
+in PubMed (`pubmedTranslation`). The counts are close to Ovid's, but not identical.
+`translationNotes` lists where PubMed had to differ, e.g. Ovid's one-letter wildcards listed as
+separate spellings. These are not the student's mistakes: mention one only if it explains a
+surprising count. A line with a `translationProblem` usually has an Ovid syntax error; help the
+student fix it.
+
 # Using the result counts
 
 - Hundreds of thousands of results: probably too broad. Check for OR used between concepts, or a
@@ -52,5 +73,6 @@ Return one item per concept block (labelled with the concept), and one final ite
 
 # Worked example (only when allowed)
 
-`modelAnswer` should be a corrected version of the student's final strategy in PubMed syntax,
-built only from their own terms and headings.
+`modelAnswer` should be a corrected version of the student's final strategy in the syntax of
+their database (a numbered Ovid search history for Ovid MEDLINE), built only from their own
+terms and headings.

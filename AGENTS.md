@@ -6,6 +6,9 @@
 - `web/shared/` is imported by both the browser and the Node server. Keep it free of Node-only and
   DOM-only APIs (only `fetch`, `URL` and similar are allowed).
 - Teaching content lives in `skills/*/SKILL.md`. Change pedagogy there, not in code.
+- Students write their search for Ovid MEDLINE (default) or PubMed (`state.database`).
+  `web/shared/ovid.js` builds Ovid lines and translates them into PubMed syntax for counting; keep
+  its rules covered by `test/ovid.test.js`.
 - The AI must return the JSON shape described in `server/ai/prompt.js`. `server/ai/parse.js`
   normalises it. Update both, plus `web/app.js` (`feedbackPanel`), if the shape changes.
 - Write all user-facing text in UK English, plainly, for students.

@@ -2,7 +2,8 @@
 // Plain JavaScript modules, no build step, so it runs on GitHub Pages and in a Codespace unchanged.
 
 import { autoConnect, canWake, connectTo, connection, lookupMesh, pubmedCount, requestFeedback, setPasscode, wakeTutor } from "./api.js";
-import { buildBlock, checkSyntax, combineBlocks, OPERATORS, parseTerms } from "./shared/strategy.js";
+import { buildBlock, checkSyntax, combineBlocks, dropCovered, meshTerm, OPERATORS, parseTerms } from "./shared/strategy.js";
+import { buildOvidHistory, checkTerm, convertTerms, DATABASES, ovidHeading, ovidKeywordLine, translateOvidHistory } from "./shared/ovid.js";
 import { pubmedUrl } from "./shared/ncbi.js";
 
 const STAGES = [
@@ -23,11 +24,15 @@ function freshState() {
   return {
     stage: 1,
     reached: 1,
+    database: "ovid", // "ovid" | "pubmed": which syntax the student writes their search in
+    convertOffer: null, // { to, concepts: [{ concept, text, changed }] } after switching database
     question: "",
     concepts: [""],
     synonyms: {}, // concept -> text
     mesh: {}, // concept -> { term, results, selected, noHeading }
-    blocks: {}, // concept -> { query, edited }
+    blocks: {}, // concept -> { query, edited } (PubMed)
+    ovidLines: {}, // concept -> { text, edited } (the Ovid keyword line)
+    counts: {}, // PubMed query -> { count, warnings } (Ovid lines are counted through PubMed)
     operators: [],
     blockCounts: {}, // concept -> { query, count }
     finalCount: null, // { query, count, warnings, queryTranslation }
@@ -43,7 +48,8 @@ let state = loadState();
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STATE_KEY) || "null");
-    return saved ? { ...freshState(), ...saved } : freshState();
+    // Work saved before the Ovid option existed was written for PubMed.
+    return saved ? { ...freshState(), database: "pubmed", ...saved } : freshState();
   } catch {
     return freshState();
   }
@@ -483,14 +489,20 @@ function stage2() {
 function stage3() {
   const list = concepts();
   const button = h("button", { type: "button", class: "button", onclick: () => submit() }, "Submit");
+  const ovid = state.database === "ovid";
 
   function submit() {
-    submitFeedback(3, { question: state.question, concepts: list.map((c) => ({ concept: c, synonyms: synonymsFor(c) })) }, button);
+    submitFeedback(
+      3,
+      { question: state.question, database: state.database, concepts: list.map((c) => ({ concept: c, synonyms: synonymsFor(c) })) },
+      button,
+    );
   }
 
   return h(
     "section",
     { class: "card" },
+    databaseSwitch(),
     stageHeader(3, [
       h("p", { text: "Authors describe the same idea in many different ways. To find all the relevant papers, list the other words they might use for each concept." }),
       learnMore(
@@ -500,43 +512,225 @@ function stage3() {
           {},
           h("li", { text: "Synonyms and lay terms: heart attack, myocardial infarction" }),
           h("li", { text: "Abbreviations: COPD, chronic obstructive pulmonary disease" }),
-          h("li", { text: "UK and US spellings: paediatric, pediatric" }),
+          h("li", { text: ovid ? "UK and US spellings: paediatric, pediatric (or p?ediatric in Ovid)" : "UK and US spellings: paediatric, pediatric" }),
           h("li", { text: "Truncation for word endings: child* finds child, children, childhood" }),
-          h("li", { text: "Phrases in quotation marks: \"physical activity\"" }),
+          h("li", { text: "Phrases: just type the words, e.g. physical activity" }),
           h("li", { text: "Specific examples within a group, e.g. individual drug names" }),
         ),
       ),
     ]),
+    operatorGuide(),
     questionBox(),
     list.length === 0
       ? h("p", { class: "alert warning", text: "Add your search concepts in stage 2 first." })
       : h(
           "div",
           { class: "concept-cards" },
-          list.map((c, i) =>
-            h(
+          list.map((c, i) => {
+            const check = h("div", { class: "term-check", "aria-live": "polite" }, termChecks(state.synonyms[c] || ""));
+            return h(
               "div",
               { class: "concept-card" },
               h("label", { for: `syn-${i}`, class: "field-label" }, "Alternative terms for ", h("strong", { text: c })),
               h("textarea", {
                 id: `syn-${i}`,
-                rows: 5,
+                class: "code",
+                rows: Math.min(12, Math.max(5, (state.synonyms[c] || "").split("\n").length + 1)),
                 value: state.synonyms[c] || "",
                 placeholder: "One term per line",
+                spellcheck: "false",
                 "aria-describedby": `syn-hint-${i}`,
                 oninput: (e) => {
                   state.synonyms[c] = e.target.value;
                   saveState();
+                  check.replaceChildren(...termChecks(e.target.value));
                 },
               }),
+              check,
               h("p", { id: `syn-hint-${i}`, class: "hint" }, "“", c, "” is already included in your search, so just list the other words authors might use."),
-            ),
-          ),
+            );
+          }),
         ),
     list.length ? notesBox(3) : null,
     h("div", { class: "actions" }, list.length ? button : null),
     feedbackPanel(3),
     navButtons(3),
+  );
+}
+
+// The key operators for the selected database, shown at the top of stage 3.
+const OPERATOR_GUIDES = {
+  ovid: {
+    rows: [
+      ["* or $", "Truncation: any word ending", "migrain*", "finds migraine, migraines, migrainous"],
+      ["*1, *2…", "Limited truncation: up to that many extra letters", "boy*1", "finds boy, boys and any other word with one more letter, but not boyfriend"],
+      ["#", "Wildcard: exactly one letter", "wom#n", "finds woman, women"],
+      ["?", "Wildcard: one letter or none", "p?ediatric*", "finds paediatric, pediatric, paediatrics, pediatrician"],
+      ["Phrase", "Just type the words. Ovid finds them together, in that order", "abdominal migraine", ""],
+      ["adj3", "Proximity: both words, in either order, with up to 2 words between (adjn allows n−1)", "migraine adj3 attack*", "finds “migraine attacks”, “attacks of migraine”"],
+    ],
+    tips: [
+      "Truncation and wildcards can't be the first character of a word.",
+      "In Ovid, untick Map Term to Subject Heading when you use these symbols. Stage 5 adds .ti,ab. (title and abstract) to your terms for you.",
+    ],
+  },
+  pubmed: {
+    rows: [
+      ["* at the end", "Truncation: any word ending. You need at least 4 letters before the *", "migrain*", "finds migraine, migraines, migrainous"],
+      ["* inside a word", "Wildcard: any number of letters, or none. You need at least 4 letters before it", "randomi*ed", "finds randomised, randomized"],
+      ["Phrase", "Just type the words. We add the quotation marks for you in stage 5", "abdominal migraine", "becomes \"abdominal migraine\"[tiab]"],
+      ["[tiab:~2]", "Proximity: the words in quotes, in either order, with up to 2 words between. Type the quotes and the tag yourself", "\"migraine attack\"[tiab:~2]", "finds “attack of migraine”"],
+    ],
+    tips: [
+      "PubMed has no one-letter wildcard (# or ?) and no limited truncation. List the forms instead, for example boy and boys.",
+      "Proximity works only in titles and abstracts, and can't be used with *.",
+      "Truncation switches off PubMed's automatic mapping to subject headings, so keep your MeSH headings from stage 4.",
+    ],
+  },
+};
+
+function operatorGuide() {
+  const guide = OPERATOR_GUIDES[state.database];
+  return h(
+    "div",
+    { class: "ops" },
+    h("h2", { text: `Key operators in ${DATABASES[state.database].name}` }),
+    h(
+      "div",
+      { class: "ops-table-wrap" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, h("th", { scope: "col", text: "Type" }), h("th", { scope: "col", text: "What it does" }), h("th", { scope: "col", text: "Example" }))),
+        h(
+          "tbody",
+          {},
+          guide.rows.map(([symbol, what, example, finds]) =>
+            h("tr", {}, h("td", {}, h("code", { text: symbol })), h("td", { text: what }), h("td", { class: "eg" }, h("code", { text: example }), finds ? ` ${finds}` : "")),
+          ),
+        ),
+      ),
+    ),
+    h("ul", {}, guide.tips.map((t) => h("li", { text: t }))),
+  );
+}
+
+// Checks each term as it's typed, for the selected database (no AI involved).
+function termChecks(text) {
+  const terms = String(text || "").split(/\n+/).map((t) => t.trim()).filter(Boolean);
+  if (terms.length === 0) return [];
+  const issues = terms.flatMap((t) => checkTerm(t, state.database).map((m) => `“${t}”: ${m}`));
+  if (issues.length === 0) {
+    return [h("span", { class: "chip ok", text: `✓ ${terms.length} term${terms.length === 1 ? "" : "s"}, ${DATABASES[state.database].short} syntax looks right` })];
+  }
+  return issues.map((m) => h("span", { class: "chip bad", text: `✕ ${m}` }));
+}
+
+// ---------- Choosing the database (stages 3–5) ----------
+
+let convertNotice = "";
+
+function setDatabase(db) {
+  if (db === state.database || !DATABASES[db]) return;
+  state.database = db;
+  convertNotice = "";
+  // Offer to convert terms already typed in the other database's syntax.
+  const concepts = [];
+  for (const c of Object.keys(state.synonyms)) {
+    const r = convertTerms(state.synonyms[c], db);
+    if (r.changed.length) concepts.push({ concept: c, text: r.text, changed: r.changed });
+  }
+  state.convertOffer = concepts.length ? { to: db, concepts } : null;
+  saveState();
+  render();
+  $("db-toggle")?.focus();
+}
+
+function convertBanner() {
+  const offer = state.convertOffer;
+  if (convertNotice) return h("p", { class: "alert success", role: "status", text: convertNotice });
+  if (!offer || offer.to !== state.database) return null;
+  const from = DATABASES[offer.to === "ovid" ? "pubmed" : "ovid"].name;
+  const changes = offer.concepts.flatMap((c) => c.changed);
+  const shown = changes.slice(0, 6);
+  return h(
+    "div",
+    { class: "convert-offer", role: "region", "aria-label": "Convert your terms" },
+    h("p", { class: "convert-title", text: `Your alternative terms are written for ${from}.` }),
+    h("p", { text: `Convert them to ${DATABASES[offer.to].name} syntax? These terms would change:` }),
+    h(
+      "ul",
+      {},
+      shown.map((c) => h("li", {}, h("code", { text: c.from }), " → ", h("code", { text: c.to }))),
+      changes.length > shown.length ? h("li", { text: `and ${changes.length - shown.length} more` }) : null,
+    ),
+    h(
+      "div",
+      { class: "actions" },
+      h(
+        "button",
+        {
+          type: "button",
+          class: "button small",
+          onclick: () => {
+            for (const c of offer.concepts) state.synonyms[c.concept] = c.text;
+            state.convertOffer = null;
+            convertNotice = `Your terms are now in ${DATABASES[offer.to].name} syntax. Check them in stage 3.`;
+            saveState();
+            render();
+          },
+        },
+        "Convert my terms",
+      ),
+      h(
+        "button",
+        {
+          type: "button",
+          class: "button secondary small",
+          onclick: () => {
+            state.convertOffer = null;
+            saveState();
+            render();
+          },
+        },
+        "Keep them as they are",
+      ),
+    ),
+  );
+}
+
+function databaseSwitch() {
+  const side = (db) =>
+    h(
+      "span",
+      { class: `db-side${state.database === db ? " on" : ""}`, "aria-hidden": "true", onclick: () => setDatabase(db) },
+      h("span", { class: "tick", text: "✓" }),
+      DATABASES[db].name,
+    );
+  return h(
+    "div",
+    { class: "db-area" },
+    h(
+      "div",
+      { class: "db-row" },
+      h(
+        "div",
+        { class: "db-switch" },
+        h("span", { class: "lead", text: "Database" }),
+        side("ovid"),
+        h("input", {
+          type: "checkbox",
+          class: "slider",
+          role: "switch",
+          id: "db-toggle",
+          checked: state.database === "pubmed",
+          "aria-label": "Use PubMed instead of Ovid MEDLINE",
+          onchange: (e) => setDatabase(e.target.checked ? "pubmed" : "ovid"),
+        }),
+        side("pubmed"),
+      ),
+    ),
+    convertBanner(),
   );
 }
 
@@ -626,7 +820,7 @@ function meshCard(c, i) {
         ? h("p", { class: "muted", text: "No headings found. Try a synonym." })
         : null,
     m.selected.length
-      ? h("p", { class: "selected-list" }, h("strong", { text: "Chosen: " }), m.selected.map((s) => h("span", { class: "tag", text: s.heading })))
+      ? h("div", { class: "chosen" }, h("h3", { text: "Your headings" }), m.selected.map((s, j) => chosenHeading(s, `${i}-${j}`)))
       : null,
     h(
       "label",
@@ -646,6 +840,38 @@ function meshCard(c, i) {
   );
 }
 
+// A chosen heading, with its Explode tick box and how it will be written in the selected database.
+function chosenHeading(s, id) {
+  const explode = s.explode !== false;
+  const written = state.database === "ovid" ? ovidHeading(s.heading, explode) : meshTerm(s.heading, { explode });
+  return h(
+    "div",
+    { class: "chosen-heading" },
+    h(
+      "div",
+      { class: "chosen-top" },
+      h("span", { class: "tag", text: s.heading }),
+      h(
+        "label",
+        { class: "explode", for: `explode-${id}` },
+        h("input", {
+          type: "checkbox",
+          id: `explode-${id}`,
+          checked: explode,
+          onchange: (e) => {
+            s.explode = e.target.checked;
+            saveState();
+            render();
+            $(`explode-${id}`)?.focus();
+          },
+        }),
+        "Explode",
+      ),
+    ),
+    h("p", { class: "written" }, h("span", { class: "muted", text: "Written as " }), h("code", { text: written })),
+  );
+}
+
 function stage4() {
   const list = concepts();
   const button = h("button", { type: "button", class: "button", onclick: () => submit() }, "Get feedback on my headings");
@@ -655,7 +881,12 @@ function stage4() {
       4,
       {
         question: state.question,
-        concepts: list.map((c) => ({ concept: c, headings: meshFor(c).selected, noHeading: meshFor(c).noHeading })),
+        database: state.database,
+        concepts: list.map((c) => ({
+          concept: c,
+          headings: meshFor(c).selected.map((s) => ({ ...s, explode: s.explode !== false })),
+          noHeading: meshFor(c).noHeading,
+        })),
       },
       button,
     );
@@ -664,6 +895,7 @@ function stage4() {
   return h(
     "section",
     { class: "card" },
+    databaseSwitch(),
     stageHeader(4, [
       h(
         "p",
@@ -677,7 +909,11 @@ function stage4() {
         h(
           "ul",
           {},
-          h("li", { text: "Headings sit in hierarchical trees. PubMed “explodes” a heading by default, so narrower headings beneath it are included too." }),
+          h("li", {
+            text: "Headings sit in hierarchical trees. Exploding a heading includes the narrower headings beneath it too. Untick Explode if you only want the heading itself.",
+          }),
+          h("li", { text: "In Ovid, exp before a heading explodes it. PubMed explodes headings unless you add :NoExp." }),
+          h("li", { text: "MeSH is the same in Ovid MEDLINE and PubMed, because both search MEDLINE." }),
           h("li", { text: "Not every concept has a heading, and the newest papers aren't indexed yet, so keep using your keywords as well." }),
           h("li", { text: "Other databases use their own vocabularies (Emtree in Embase, CINAHL Headings in CINAHL)." }),
         ),
@@ -694,7 +930,7 @@ function stage4() {
 // ---------- Stage 5: Boolean strategy ----------
 
 function generatedBlock(c) {
-  return buildBlock({ concept: c, synonyms: synonymsFor(c), meshHeadings: meshFor(c).selected.map((s) => s.heading) });
+  return buildBlock({ concept: c, synonyms: synonymsFor(c), meshHeadings: meshFor(c).selected.map((s) => ({ heading: s.heading, explode: s.explode !== false })) });
 }
 
 function blockFor(c) {
@@ -760,6 +996,10 @@ function finalSection(list) {
 }
 
 function stage5() {
+  return state.database === "ovid" ? stage5Ovid() : stage5Pubmed();
+}
+
+function stage5Pubmed() {
   const list = concepts();
   const feedbackButton = h("button", { type: "button", class: "button", onclick: () => submit() }, "Get feedback on my strategy");
 
@@ -769,6 +1009,7 @@ function stage5() {
       5,
       {
         question: state.question,
+        database: "pubmed",
         blocks: list.map((c) => {
           const q = blockFor(c).query;
           const counted = state.blockCounts[c];
@@ -848,6 +1089,7 @@ function stage5() {
   return h(
     "section",
     { class: "card" },
+    databaseSwitch(),
     stageHeader(5, [
       h("p", {}, "Now combine everything. Within each concept, terms are joined with ", h("code", { text: "OR" }), " to broaden the search. Then choose how to join the concepts together."),
       h("p", { text: "We've built a search line for each concept from your alternative terms and MeSH headings. Check and edit them, count the results, then choose the operators." }),
@@ -875,25 +1117,365 @@ function stage5() {
     ),
     feedbackPanel(5),
     navButtons(5),
+    startAgain(),
+  );
+}
+
+function startAgain() {
+  return h(
+    "p",
+    { class: "start-again" },
     h(
-      "p",
-      { class: "start-again" },
-      h(
-        "button",
-        {
-          type: "button",
-          class: "button link",
-          onclick: () => {
-            if (confirm("Clear everything and start a new search?")) {
-              state = freshState();
-              saveState();
-              goTo(1);
-            }
-          },
-        },
-        "Start a new search",
-      ),
+      "button",
+      { type: "button", class: "button link", "aria-haspopup": "dialog", onclick: openRestart },
+      "Start a new search",
     ),
+  );
+}
+
+// ---------- Stage 5 in Ovid MEDLINE: a numbered search history ----------
+
+const LETTERS = "ABCDE";
+let translationOpen = false;
+
+function ovidLineFor(c) {
+  const saved = state.ovidLines[c];
+  if (saved?.edited) return saved.text;
+  return ovidKeywordLine(dropCovered([c, ...synonymsFor(c)]));
+}
+
+function ovidHistory(list) {
+  const history = buildOvidHistory(
+    list.map((c) => ({
+      concept: c,
+      headings: meshFor(c).selected.map((s) => ({ heading: s.heading, explode: s.explode !== false })),
+      keywordLine: ovidLineFor(c),
+    })),
+    state.operators,
+  );
+  const translated = translateOvidHistory(history.lines);
+  return { ...history, lines: translated.lines, byLine: translated.byLine };
+}
+
+const countFor = (query) => (query ? state.counts[query] : undefined);
+
+function rememberCount(query, result) {
+  state.counts[query] = { count: result.count, warnings: result.warnings || [] };
+  const keys = Object.keys(state.counts);
+  if (keys.length > 80) delete state.counts[keys[0]];
+}
+
+// Counts each query in PubMed (one at a time, to stay within NCBI's rate limit), then re-renders.
+async function countQueries(queries, button) {
+  const todo = [...new Set(queries.filter((q) => q && !countFor(q)))];
+  const original = button.textContent;
+  button.disabled = true;
+  try {
+    for (const [i, q] of todo.entries()) {
+      button.textContent = todo.length > 1 ? `Counting ${i + 1} of ${todo.length}…` : "Counting…";
+      rememberCount(q, await pubmedCount(q));
+    }
+    saveState();
+    render();
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = original;
+    button.after(inlineError(`The PubMed count didn't work: ${err.message}`));
+  }
+}
+
+function hitsCell(query) {
+  const c = countFor(query);
+  return h(
+    "span",
+    { class: "hits" },
+    c ? [h("strong", { text: c.count.toLocaleString("en-GB") }), " results"] : h("span", { class: "muted", text: "–" }),
+  );
+}
+
+function ovidLineRow(line, c, i) {
+  const keywords = line.kind === "keywords";
+  const body = keywords
+    ? [
+        h("label", { class: "visually-hidden", for: `ovid-line-${i}`, text: `Line ${line.n}, keywords for ${c}` }),
+        h("textarea", {
+          id: `ovid-line-${i}`,
+          class: "code",
+          rows: 2,
+          spellcheck: "false",
+          value: line.text,
+          oninput: (e) => {
+            state.ovidLines[c] = { text: e.target.value, edited: true };
+            saveState();
+          },
+          onchange: () => render(),
+        }),
+      ]
+    : h("span", { class: "syntax", text: line.text });
+  return h(
+    "div",
+    { class: `hline ${line.kind}` },
+    h("span", { class: "num", text: String(line.n) }),
+    h("div", { class: "hline-body" }, body, line.error ? h("p", { class: "field-error small", text: line.error }) : null),
+    hitsCell(line.pubmed),
+  );
+}
+
+function ovidConceptCard(c, i, history) {
+  const lines = history.lines.filter((l) => l.concept === c);
+  const button = h(
+    "button",
+    { type: "button", class: "button secondary small", onclick: () => countQueries(lines.map((l) => l.pubmed), button) },
+    "Count results",
+  );
+  return h(
+    "div",
+    { class: "concept-card block" },
+    h("div", { class: "block-head" }, h("span", { class: "line-num", text: LETTERS[i] || String(i + 1) }), h("h2", { text: c })),
+    lines.length
+      ? h("div", { class: "history" }, lines.map((l) => ovidLineRow(l, c, i)))
+      : h("p", { class: "muted", text: "Add alternative terms in stage 3 or headings in stage 4 for this concept." }),
+    h(
+      "div",
+      { class: "block-actions" },
+      lines.length ? button : null,
+      state.ovidLines[c]?.edited
+        ? h(
+            "button",
+            {
+              type: "button",
+              class: "button link small",
+              onclick: () => {
+                delete state.ovidLines[c];
+                saveState();
+                render();
+              },
+            },
+            "Rebuild from my terms",
+          )
+        : null,
+    ),
+  );
+}
+
+const MATCH_LABELS = { same: "✓ Same", listed: "⇄ Listed", close: "! Close", check: "✕ Check" };
+const MATCH_CLASS = { same: "ok", listed: "info", close: "warn", check: "bad" };
+
+// Every change made for PubMed, merged across lines: [{ lines, kind, ovid, pubmed, why }].
+function translationChanges(history) {
+  const rows = new Map();
+  for (const line of history.lines) {
+    for (const c of line.changes || []) {
+      const k = `${c.kind}|${c.ovid}|${c.pubmed}`;
+      if (!rows.has(k)) rows.set(k, { ...c, lines: [] });
+      rows.get(k).lines.push(line.n);
+    }
+  }
+  const order = { check: 0, close: 1, listed: 2, same: 3 };
+  return [...rows.values()].sort((a, b) => order[a.kind] - order[b.kind] || a.lines[0] - b.lines[0]);
+}
+
+function translationSection(history, finalQuery) {
+  const changes = translationChanges(history);
+  const tally = (kind) => changes.filter((c) => c.kind === kind).length;
+  const summaryParts = [
+    tally("listed") && `${tally("listed")} listed out`,
+    tally("close") && `${tally("close")} close match${tally("close") === 1 ? "" : "es"}`,
+    tally("check") && `${tally("check")} to check`,
+  ].filter(Boolean);
+  const finalCount = countFor(finalQuery);
+  const countButton = h("button", { type: "button", class: "button secondary small", disabled: !finalQuery, onclick: () => countQueries([finalQuery], countButton) }, "Count results");
+  return h(
+    "details",
+    {
+      class: "translation",
+      open: translationOpen,
+      ontoggle: (e) => {
+        translationOpen = e.target.open;
+      },
+    },
+    h("summary", {}, "PubMed translation", summaryParts.length ? h("span", { class: "muted small", text: ` (${summaryParts.join(", ")})` }) : null),
+    h(
+      "div",
+      { class: "translation-body" },
+      h("p", { class: "small", text: "Ovid can't be searched from this page, so we translate your search into PubMed syntax to count the results. Both search MEDLINE, so the numbers are close but not identical." }),
+      changes.length
+        ? h(
+            "div",
+            { class: "table-wrap" },
+            h(
+              "table",
+              { class: "report" },
+              h(
+                "thead",
+                {},
+                h("tr", {}, ["Line", "Ovid", "PubMed", "Match"].map((t) => h("th", { scope: "col", text: t }))),
+              ),
+              h(
+                "tbody",
+                {},
+                changes.map((c) =>
+                  h(
+                    "tr",
+                    {},
+                    h("td", { text: c.lines.join(", ") }),
+                    h("td", {}, h("code", { text: c.ovid })),
+                    h("td", {}, c.pubmed ? h("code", { text: c.pubmed }) : null, c.why ? h("p", { class: "muted small", text: c.why }) : null),
+                    h("td", {}, h("span", { class: `chip ${MATCH_CLASS[c.kind]}`, text: MATCH_LABELS[c.kind] })),
+                  ),
+                ),
+              ),
+            ),
+          )
+        : null,
+      finalQuery ? h("pre", { class: "code-block", tabindex: "0", text: finalQuery }) : h("p", { class: "muted", text: "Choose an operator between each pair of concepts to see the full search." }),
+      h(
+        "div",
+        { class: "block-actions" },
+        countButton,
+        finalQuery ? h("a", { class: "button link", href: pubmedUrl(finalQuery), target: "_blank", rel: "noopener" }, "Open in PubMed ↗") : null,
+        finalCount ? h("p", { class: "count" }, h("strong", { text: finalCount.count.toLocaleString("en-GB") }), " PubMed records") : null,
+      ),
+      finalCount?.warnings?.length ? h("p", { class: "alert warning small", text: `PubMed: ${finalCount.warnings.join(" ")}` }) : null,
+      h("p", { class: "hint", text: "Ovid MEDLINE usually finds slightly fewer, because PubMed also includes records that aren't in MEDLINE yet." }),
+    ),
+  );
+}
+
+const historyText = (history) => history.lines.map((l) => `${String(l.n).padEnd(3)}${l.text}`).join("\n");
+
+function copyButton(getText) {
+  const status = h("span", { class: "small muted", "aria-live": "polite" });
+  const button = h(
+    "button",
+    {
+      type: "button",
+      class: "button secondary small",
+      onclick: async () => {
+        try {
+          await navigator.clipboard.writeText(getText());
+          status.textContent = "Copied";
+        } catch {
+          status.textContent = "Copying didn't work. Select the search above and copy it instead.";
+        }
+      },
+    },
+    "Copy for Ovid",
+  );
+  return [button, status];
+}
+
+function stage5Ovid() {
+  const list = concepts();
+  const history = ovidHistory(list);
+  const finalLine = history.lines.find((l) => l.n === history.finalLine);
+  const finalQuery = finalLine?.pubmed || "";
+  const feedbackButton = h("button", { type: "button", class: "button", onclick: () => submit() }, "Get feedback on my strategy");
+
+  function submit() {
+    const conceptQuery = (c) => history.byLine[history.conceptLine[c]] || "";
+    submitFeedback(
+      5,
+      {
+        question: state.question,
+        database: "ovid",
+        searchHistory: history.lines.map((l) => ({ line: l.n, search: l.text, count: countFor(l.pubmed)?.count, error: l.error || undefined })),
+        blocks: list.map((c) => ({
+          concept: c,
+          query: history.lines.filter((l) => l.concept === c).map((l) => `${l.n} ${l.text}`).join(" | "),
+          count: countFor(conceptQuery(c))?.count,
+        })),
+        operators: state.operators.slice(0, Math.max(0, list.length - 1)),
+        strategy: historyText(history),
+        pubmedTranslation: finalQuery,
+        translationNotes: translationChanges(history)
+          .filter((c) => c.kind !== "same")
+          .map((c) => `Line ${c.lines.join(", ")}: ${c.ovid} → ${c.pubmed || "(not translated)"}. ${c.why}`.trim()),
+        count: countFor(finalQuery)?.count,
+        warnings: countFor(finalQuery)?.warnings || [],
+      },
+      feedbackButton,
+    );
+  }
+
+  const cards = list.map((c, i) => {
+    const card = ovidConceptCard(c, i, history);
+    if (i === list.length - 1) return card;
+    const select = h(
+      "select",
+      {
+        id: `op-${i}`,
+        onchange: (e) => {
+          state.operators[i] = e.target.value;
+          saveState();
+          render();
+        },
+      },
+      h("option", { value: "", text: "Choose…" }),
+      OPERATORS.map((op) => h("option", { value: op, text: op, selected: state.operators[i] === op })),
+    );
+    const a = LETTERS[i] || String(i + 1);
+    const b = LETTERS[i + 1] || String(i + 2);
+    return [card, h("div", { class: "operator" }, h("label", { for: `op-${i}`, text: `Combine ${a} and ${b} with` }), select)];
+  });
+
+  const finalCount = countFor(finalQuery);
+  const allButton = h(
+    "button",
+    { type: "button", class: "button secondary small", onclick: () => countQueries(history.lines.map((l) => l.pubmed), allButton) },
+    "Count all lines",
+  );
+
+  return h(
+    "section",
+    { class: "card" },
+    databaseSwitch(),
+    stageHeader(5, [
+      h("p", {}, "Here is your search as an Ovid search history, the way it will appear in Ovid. Each concept has its subject headings, a line of keywords, and a line joining them with ", h("code", { text: "or" }), ". You can edit the keyword lines."),
+      h("p", { text: "Then choose how to join the concepts. The last line combines them." }),
+      learnMore(
+        "and, or and not in Ovid",
+        h(
+          "ul",
+          {},
+          h("li", {}, h("code", { text: "or" }), " finds records with any of the terms (more results): use it within a concept."),
+          h("li", {}, h("code", { text: "and" }), " finds records with all of the concepts (fewer results): use it between concepts."),
+          h("li", {}, h("code", { text: "not" }), " excludes records. Use it with great care, because it can remove relevant ones."),
+          h("li", {}, h("code", { text: "exp Heading/" }), " searches an exploded subject heading. ", h("code", { text: ".ti,ab." }), " searches words in the title and abstract."),
+          h("li", {}, "Line numbers stand for earlier searches: ", h("code", { text: "4 and 7" }), " combines lines 4 and 7, and ", h("code", { text: "or/1-3" }), " means 1 or 2 or 3."),
+        ),
+      ),
+    ]),
+    questionBox(),
+    list.length === 0 ? h("p", { class: "alert warning", text: "Add your search concepts in stage 2 first." }) : h("div", { class: "blocks" }, cards),
+    list.length
+      ? h(
+          "div",
+          { class: "final-strategy", id: "final-strategy", "aria-live": "polite" },
+          h("h2", { text: "Your Ovid search strategy" }),
+          history.lines.length ? h("pre", { class: "code-block", tabindex: "0", text: historyText(history) }) : null,
+          !history.finalLine && list.length > 1 ? h("p", { class: "muted", text: "Choose an operator between each pair of concepts to see the last line." }) : null,
+          h(
+            "div",
+            { class: "block-actions" },
+            history.lines.length ? copyButton(() => history.lines.map((l) => l.text).join("\n")) : null,
+            history.lines.length ? allButton : null,
+            finalCount ? h("p", { class: "count" }, h("strong", { text: finalCount.count.toLocaleString("en-GB") }), ` results for line ${history.finalLine} (counted in PubMed)`) : null,
+          ),
+          h("p", { class: "hint", text: "To run it in Ovid, start with an empty search history so the line numbers match, then paste the lines into Ovid's Multi-Line search." }),
+          translationSection(history, finalQuery),
+        )
+      : null,
+    list.length ? notesBox(5) : null,
+    h(
+      "div",
+      { class: "actions" },
+      list.length ? feedbackButton : null,
+      h("button", { type: "button", class: "button secondary", onclick: () => downloadStrategy(list) }, "Download my search"),
+    ),
+    feedbackPanel(5),
+    navButtons(5),
+    startAgain(),
   );
 }
 
@@ -906,21 +1488,41 @@ function downloadStrategy(list) {
     state.question.trim(),
     "",
   ];
+  const ovid = state.database === "ovid";
+  lines.push(`Database: ${DATABASES[state.database].name}`, "");
   list.forEach((c, i) => {
     const m = meshFor(c);
     lines.push(`Concept ${i + 1}: ${c}`);
     lines.push(`  Alternative terms: ${synonymsFor(c).join("; ") || "none"}`);
-    lines.push(`  MeSH: ${m.selected.map((s) => `${s.heading} (${s.ui})`).join("; ") || (m.noHeading ? "no suitable heading" : "none chosen")}`);
-    const q = blockFor(c).query;
-    const n = state.blockCounts[c]?.query === q ? ` – ${state.blockCounts[c].count} results` : "";
-    lines.push(`  #${i + 1} ${q}${n}`);
+    const headings = m.selected.map((s) => `${s.heading} (${s.ui}${s.explode === false ? ", not exploded" : ", exploded"})`);
+    lines.push(`  MeSH: ${headings.join("; ") || (m.noHeading ? "no suitable heading" : "none chosen")}`);
+    if (!ovid) {
+      const q = blockFor(c).query;
+      const n = state.blockCounts[c]?.query === q ? ` – ${state.blockCounts[c].count} results` : "";
+      lines.push(`  #${i + 1} ${q}${n}`);
+    }
     lines.push("");
   });
-  const strategy = finalStrategy(list);
-  lines.push("Final PubMed strategy:", strategy || "(not combined yet)");
+  let strategy;
+  let count;
+  if (ovid) {
+    const history = ovidHistory(list);
+    strategy = history.byLine[history.finalLine] || "";
+    lines.push("Ovid search history:");
+    for (const l of history.lines) {
+      const n = countFor(l.pubmed);
+      lines.push(`  ${String(l.n).padEnd(3)}${l.text}${n ? `   (${n.count} results in PubMed)` : ""}`);
+    }
+    lines.push("", "Translated for PubMed:", strategy || "(not combined yet)");
+    count = countFor(strategy)?.count;
+  } else {
+    strategy = finalStrategy(list);
+    lines.push("Final PubMed strategy:", strategy || "(not combined yet)");
+    count = state.finalCount?.query === strategy ? state.finalCount.count : undefined;
+  }
+  if (count !== undefined) lines.push(`Results in PubMed: ${count}`);
   const notes = STAGES.filter((s) => (state.notes[s.n] || "").trim()).map((s) => `  ${s.short}: ${state.notes[s.n].trim()}`);
   if (notes.length) lines.push("", "Notes for the tutor:", ...notes);
-  if (state.finalCount?.query === strategy) lines.push(`Results: ${state.finalCount.count}`);
   const blob = new Blob([lines.join("\n")], { type: "text/plain" });
   const a = h("a", { href: URL.createObjectURL(blob), download: "search-strategy.txt" });
   document.body.append(a);
@@ -1034,6 +1636,36 @@ async function startWake() {
   renderWakeBanner();
 }
 
+// ---------- Clearing data ----------
+
+let flash = ""; // a one-off message shown above the stage, e.g. after clearing data
+
+function openRestart() {
+  $("restart-dialog").showModal();
+}
+
+// Deletes the student's saved work from this browser and goes back to stage 1.
+// Connection settings (server address, passcode) are kept: they aren't the student's work.
+function clearAndRestart() {
+  try {
+    localStorage.removeItem(STATE_KEY);
+  } catch {
+    // Storage may be unavailable; resetting the state below is enough.
+  }
+  state = freshState();
+  convertNotice = "";
+  translationOpen = false;
+  $("restart-dialog").close();
+  flash = "Your work has been cleared. You're starting again at stage 1.";
+  goTo(1);
+}
+
+function setupRestartDialog() {
+  $("restart-button").addEventListener("click", openRestart);
+  $("restart-cancel").addEventListener("click", () => $("restart-dialog").close());
+  $("restart-confirm").addEventListener("click", clearAndRestart);
+}
+
 function openConnection() {
   const dialog = $("connection-dialog");
   $("backend-input").value = connection.base;
@@ -1072,11 +1704,13 @@ const RENDERERS = { 1: stage1, 2: stage2, 3: stage3, 4: stage4, 5: stage5 };
 function render() {
   renderStepper();
   renderWakeBanner();
-  $("stage").replaceChildren(RENDERERS[state.stage]());
+  $("stage").replaceChildren(flash ? h("p", { class: "alert success", role: "status", text: flash }) : "", RENDERERS[state.stage]());
+  flash = "";
   document.title = `${STAGES[state.stage - 1].title} – Database Search Tutorial`;
 }
 
 setupConnectionDialog();
+setupRestartDialog();
 render();
 autoConnect().then(() => {
   renderConnection();

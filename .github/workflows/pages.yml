@@ -3,7 +3,7 @@ name: Publish web app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", ".github/workflows/pages.yml", "scripts/stamp-versions.sh"]
   workflow_dispatch:
 
 permissions:
@@ -24,6 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Add a version to file addresses, so browsers load the new files after each update
+        run: bash scripts/stamp-versions.sh web "${GITHUB_SHA::8}"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

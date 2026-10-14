@@ -1213,3 +1213,22 @@ dialog .actions {
     transition: none;
   }
 }
+
+/* Clear data and restart */
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.button.danger {
+  background: var(--missing);
+  border-color: var(--missing);
+  color: var(--on-primary);
+}
+.button.danger:hover {
+  filter: brightness(0.92);
+}
+#restart-dialog .alert {
+  margin: 0 0 16px;
+}

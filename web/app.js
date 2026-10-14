@@ -1127,17 +1127,7 @@ function startAgain() {
     { class: "start-again" },
     h(
       "button",
-      {
-        type: "button",
-        class: "button link",
-        onclick: () => {
-          if (confirm("Clear everything and start a new search?")) {
-            state = freshState();
-            saveState();
-            goTo(1);
-          }
-        },
-      },
+      { type: "button", class: "button link", "aria-haspopup": "dialog", onclick: openRestart },
       "Start a new search",
     ),
   );
@@ -1646,6 +1636,36 @@ async function startWake() {
   renderWakeBanner();
 }
 
+// ---------- Clearing data ----------
+
+let flash = ""; // a one-off message shown above the stage, e.g. after clearing data
+
+function openRestart() {
+  $("restart-dialog").showModal();
+}
+
+// Deletes the student's saved work from this browser and goes back to stage 1.
+// Connection settings (server address, passcode) are kept: they aren't the student's work.
+function clearAndRestart() {
+  try {
+    localStorage.removeItem(STATE_KEY);
+  } catch {
+    // Storage may be unavailable; resetting the state below is enough.
+  }
+  state = freshState();
+  convertNotice = "";
+  translationOpen = false;
+  $("restart-dialog").close();
+  flash = "Your work has been cleared. You're starting again at stage 1.";
+  goTo(1);
+}
+
+function setupRestartDialog() {
+  $("restart-button").addEventListener("click", openRestart);
+  $("restart-cancel").addEventListener("click", () => $("restart-dialog").close());
+  $("restart-confirm").addEventListener("click", clearAndRestart);
+}
+
 function openConnection() {
   const dialog = $("connection-dialog");
   $("backend-input").value = connection.base;
@@ -1684,11 +1704,13 @@ const RENDERERS = { 1: stage1, 2: stage2, 3: stage3, 4: stage4, 5: stage5 };
 function render() {
   renderStepper();
   renderWakeBanner();
-  $("stage").replaceChildren(RENDERERS[state.stage]());
+  $("stage").replaceChildren(flash ? h("p", { class: "alert success", role: "status", text: flash }) : "", RENDERERS[state.stage]());
+  flash = "";
   document.title = `${STAGES[state.stage - 1].title} – Database Search Tutorial`;
 }
 
 setupConnectionDialog();
+setupRestartDialog();
 render();
 autoConnect().then(() => {
   renderConnection();

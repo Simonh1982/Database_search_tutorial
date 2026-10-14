@@ -331,6 +331,8 @@ npm test
 ## Known limitations of this proof of concept
 
 - Progress is saved only in the student's own browser. There are no accounts and nothing is stored on the server.
+  It stays there until the student clicks **Clear data and restart** (top of the page), which
+  deletes it after a warning and goes back to stage 1.
 - The server keeps rate limits in memory, so they reset when it restarts.
 - In the offline demo, MeSH and PubMed look-ups go straight from the browser to NCBI. If a network
   blocks this, they work only while the Codespace is connected.

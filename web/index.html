@@ -24,10 +24,13 @@
             <p class="brand-sub">Build a biomedical search strategy, step by step</p>
           </div>
         </div>
-        <button id="connection-button" class="status-pill" type="button" aria-haspopup="dialog" data-mode="connecting">
-          <span class="dot" aria-hidden="true"></span>
-          <span id="connection-label">Connecting…</span>
-        </button>
+        <div class="header-actions">
+          <button id="restart-button" class="button secondary small" type="button" aria-haspopup="dialog">Clear data and restart</button>
+          <button id="connection-button" class="status-pill" type="button" aria-haspopup="dialog" data-mode="connecting">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="connection-label">Connecting…</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -63,6 +66,19 @@
           <button type="submit" class="button" id="connection-save">Connect</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="restart-dialog" aria-labelledby="restart-title" aria-describedby="restart-text">
+      <h2 id="restart-title">Clear your work and restart?</h2>
+      <p id="restart-text">
+        This deletes everything you've entered in this browser, including your question, search terms, subject headings and
+        the tutor's feedback. You'll start again at stage 1.
+      </p>
+      <p class="alert warning"><strong>This can't be undone.</strong> To keep a copy of your search, cancel and use “Download my search” in stage 5 first.</p>
+      <div class="actions">
+        <button type="button" class="button secondary" id="restart-cancel" autofocus>Cancel</button>
+        <button type="button" class="button danger" id="restart-confirm">Clear and restart</button>
+      </div>
     </dialog>
   </body>
 </html>
